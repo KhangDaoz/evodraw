@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100vw; height: 100vh;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    /* Forces Windows hit-testing on transparent pixels when interactive */
+    body.interactive { background: rgba(0, 0, 0, 0.01); }
+
+    canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+    }
+
+    #statusBar {
+      position: fixed;
+      top: 8px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      padding: 5px 18px;
+      border-radius: 20px;
+      font-size: 13px; font-weight: 600;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #statusBar.work-mode {
+      background: rgba(0,0,0,0.3);
+      color: rgba(255,255,255,0.75);
+    }
+    #statusBar.draw-mode {
+      background: rgba(46,204,113,0.88);
+      color: #fff;
+    }
+
+    #toolbar {
+      position: fixed;
+      bottom: 20px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: none;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 16px;
+      border-radius: 16px;
+      background: rgba(25,25,25,0.88);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    #toolbar.visible { display: flex; }
+
+    .tool-btn {
+      width: 36px; height: 36px;
+      border: 2px solid #2ecc71;
+      border-radius: 10px;
+      background: rgba(46,204,113,0.2);
+      color: #2ecc71;
+      font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    #colorDot {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: #FF3333;
+      border: 2px solid rgba(255,255,255,0.5);
+    }
+
+    #remoteBadge {
+      position: fixed;
+      top: 8px; right: 16px;
+      z-index: 100;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px; font-weight: 600;
+      background: rgba(68,136,255,0.8);
+      color: #fff;
+      display: none;
+      pointer-events: none;
+    }
+    #remoteBadge.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div id="statusBar" class="work-mode">👁️ WORK MODE — F1 or Ctrl+` to interact</div>
+  <div id="remoteBadge">🖊️ reviewer annotating…</div>
+
+  <div id="toolbar">
+    <div class="tool-btn">✏️</div>
+    <div id="colorDot"></div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <script>
+    const canvas      = document.getElementById('canvas');
+    const ctx         = canvas.getContext('2d');
+    const statusBar   = document.getElementById('statusBar');
+    const toolbar     = document.getElementById('toolbar');
+    const remoteBadge = document.getElementById('remoteBadge');
+
+    const LOCAL_COLOR  = '#FF3333';
+    const REMOTE_COLOR = '#4488FF';
+    const LINE_WIDTH   = 4;
+
+    // ── Viewport — normalised units (nvx/nvy are fraction of canvas size) ──
+    // World coordinates {x, y} are also normalised [0,1]:
+    //   (0,0) = top-left of screen at default zoom
+    //   (1,1) = bottom-right of screen at default zoom
+    let nvx = 0, nvy = 0, vscale = 1;
+
+    // Strokes: arrays of {x, y} in normalised world space
+    const localStrokes  = [];
+    const remoteStrokes = [];
+    let current   = null;   // [{x,y}] currently drawing stroke
+    let isDrawing = false;
+    let isPanning = false, spaceHeld = false;
+    let panX = 0, panY = 0;
+    let remoteBadgeTimer = null;
+
+    // Screen pixel → normalised world coord
+    const toWorld = (sx, sy) => ({
+      x: (sx / canvas.width  - nvx) / vscale,
+      y: (sy / canvas.height - nvy) / vscale,
+    });
+
+    // ── resize ────────────────────────────────────────────────────
+    function resize() {
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+      redraw();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ── render ────────────────────────────────────────────────────
+    function redraw() {
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      ctx.save();
+      ctx.translate(nvx * W, nvy * H);
+      ctx.scale(vscale, vscale);
+
+      // All strokes — same transform, same world space
+      localStrokes.forEach(pts  => drawPts(pts,  LOCAL_COLOR));
+      remoteStrokes.forEach(pts => drawPts(pts,  REMOTE_COLOR));
+      if (current) drawPts(current, LOCAL_COLOR);
+
+      ctx.restore();
+    }
+
+    // Draw an array of {x,y} world-normalised points
+    function drawPts(pts, color) {
+      if (!pts || pts.length === 0) return;
+      const W = canvas.width, H = canvas.height;
+      const lw = LINE_WIDTH / vscale;
+      ctx.strokeStyle = color;
+      ctx.fillStyle   = color;
+      ctx.lineWidth   = lw;
+      ctx.lineCap     = 'round'; ctx.lineJoin = 'round';
+      ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 3 / vscale;
+
+      if (pts.length === 1) {
+        ctx.beginPath();
+        ctx.arc(pts[0].x * W, pts[0].y * H, lw / 2, 0, Math.PI * 2);
+        ctx.fill(); ctx.shadowBlur = 0; return;
+      }
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x * W, pts[0].y * H);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x * W, pts[i].y * H);
+      ctx.stroke(); ctx.shadowBlur = 0;
+    }
+
+    function emitViewport() {
+      window.electronAPI.sendViewport({ nvx, nvy, vscale });
+    }
+
+    function showRemoteBadge() {
+      remoteBadge.classList.add('visible');
+      clearTimeout(remoteBadgeTimer);
+      remoteBadgeTimer = setTimeout(() => remoteBadge.classList.remove('visible'), 2000);
+    }
+
+    // ── mouse ─────────────────────────────────────────────────────
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 1 || (e.button === 0 && spaceHeld)) {
+        isPanning = true; panX = e.clientX; panY = e.clientY;
+        canvas.style.cursor = 'grabbing';
+        e.preventDefault(); return;
+      }
+      if (e.button !== 0) return;
+      isDrawing = true;
+      current = [toWorld(e.clientX, e.clientY)];
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (isPanning) {
+        nvx += (e.clientX - panX) / canvas.width;
+        nvy += (e.clientY - panY) / canvas.height;
+        panX = e.clientX; panY = e.clientY;
+        redraw(); return;
+      }
+      if (!isDrawing) return;
+      current.push(toWorld(e.clientX, e.clientY));
+      redraw();
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      if (isPanning) {
+        isPanning = false;
+        canvas.style.cursor = spaceHeld ? 'grab' : 'crosshair';
+        emitViewport();   // broadcast final pan position
+        return;
+      }
+      if (!isDrawing) return;
+      localStrokes.push(current);
+      window.electronAPI.sendStroke(current);   // {x,y} normalised world — already correct
+      current   = null;
+      isDrawing = false;
+      redraw();
+    });
+
+    // Scroll → zoom towards cursor
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      const ns  = Math.max(0.1, Math.min(10, vscale * factor));
+      const ncx = e.clientX / canvas.width;
+      const ncy = e.clientY / canvas.height;
+      nvx = ncx - (ncx - nvx) * (ns / vscale);
+      nvy = ncy - (ncy - nvy) * (ns / vscale);
+      vscale = ns;
+      redraw();
+      emitViewport();
+    }, { passive: false });
+
+    // Double-click → clear everything
+    canvas.addEventListener('dblclick', () => {
+      localStrokes.length = 0; remoteStrokes.length = 0;
+      current = null; isDrawing = false;
+      window.electronAPI.sendClear();
+      redraw();
+    });
+
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape') window.electronAPI.requestWorkMode();
+      if (e.code === 'Space' && !spaceHeld) {
+        spaceHeld = true; canvas.style.cursor = 'grab'; e.preventDefault();
+      }
+      if (e.code === 'Home') {
+        nvx = 0; nvy = 0; vscale = 1; redraw(); emitViewport();
+      }
+    });
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') {
+        spaceHeld = false; isPanning = false;
+        canvas.style.cursor = 'crosshair';
+      }
+    });
+
+    // ── Remote events from server (via main.js IPC) ────────────────
+    window.electronAPI.onRemoteStroke((pts) => {
+      // Normalise property names ({nx,ny} from old format, {x,y} from new)
+      remoteStrokes.push(pts.map(p => ({ x: p.x ?? p.nx, y: p.y ?? p.ny })));
+      showRemoteBadge();
+      redraw();
+    });
+
+    window.electronAPI.onRemoteSync((strokes) => {
+      strokes.forEach(pts =>
+        remoteStrokes.push(pts.map(p => ({ x: p.x ?? p.nx, y: p.y ?? p.ny })))
+      );
+      if (remoteStrokes.length > 0) showRemoteBadge();
+      redraw();
+    });
+
+    window.electronAPI.onRemoteClear(() => {
+      remoteStrokes.length = 0;
+      localStrokes.length  = 0;
+      current = null;
+      redraw();
+    });
+
+    window.electronAPI.onRemoteViewport(({ nvx: rnvx, nvy: rnvy, vscale: rs }) => {
+      nvx = rnvx; nvy = rnvy; vscale = rs;
+      redraw();
+    });
+
+    // ── mode change ────────────────────────────────────────────────
+    window.electronAPI.onModeChanged((interactive) => {
+      if (interactive) {
+        statusBar.className  = 'draw-mode';
+        statusBar.textContent = '✏️ DRAW MODE — draw | Space+drag to pan | scroll to zoom | dbl-click clears | F1/Ctrl+` to exit';
+        toolbar.classList.add('visible');
+        document.body.classList.add('interactive');
+        canvas.style.cursor = 'crosshair';
+      } else {
+        if (isDrawing && current) { localStrokes.push(current); current = null; isDrawing = false; }
+        statusBar.className  = 'work-mode';
+        statusBar.textContent = '👁️ WORK MODE — F1 or Ctrl+` to interact';
+        toolbar.classList.remove('visible');
+        document.body.classList.remove('interactive');
+        canvas.style.cursor = 'default';
+        redraw();
+      }
+    });
+  </script>
+</body>
+</html>

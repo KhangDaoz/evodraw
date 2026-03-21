@@ -1,0 +1,20 @@
+{
+  "name": "evodraw-poc",
+  "version": "0.1.0",
+  "description": "PoC — Transparent overlay with real-time browser annotations",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dev": "concurrently \"node server.js\" \"electron .\""
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.4",
+    "socket.io-client": "^4.7.4"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^29.4.6"
+  }
+}

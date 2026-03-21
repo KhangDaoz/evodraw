@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>EvoDraw — Reviewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #12121e;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      color: #fff;
+    }
+
+    header {
+      padding: 10px 20px;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 15px; font-weight: 700; letter-spacing: 0.5px; }
+
+    #status {
+      font-size: 12px; font-weight: 600;
+      padding: 3px 10px; border-radius: 10px;
+      background: rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.5);
+    }
+    #status.connected { background: rgba(46,204,113,0.25); color: #2ecc71; }
+
+    #zoomLabel {
+      font-size: 12px; opacity: 0.5;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #hint { font-size: 12px; opacity: 0.35; margin-left: auto; }
+
+    /* Canvas area — fills remaining space */
+    #wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    /* Faint grid to suggest infinite canvas */
+    #wrap::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+
+    canvas { position: absolute; top: 0; left: 0; }
+
+    #watermark {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center; pointer-events: none; user-select: none;
+    }
+    #watermark h2 { font-size: 28px; opacity: 0.06; }
+    #watermark p  { font-size: 13px; opacity: 0.06; margin-top: 6px; }
+
+    #clearBtn {
+      position: absolute; bottom: 14px; right: 14px;
+      padding: 8px 18px; border-radius: 10px;
+      border: 1px solid rgba(255,80,80,0.3);
+      background: rgba(255,60,60,0.2); color: #ff8888;
+      font-size: 13px; cursor: pointer; transition: background 0.15s;
+    }
+    #clearBtn:hover { background: rgba(255,60,60,0.45); }
+
+    #resetViewBtn {
+      position: absolute; bottom: 14px; left: 14px;
+      padding: 8px 14px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.6);
+      font-size: 13px; cursor: pointer; transition: background 0.15s;
+    }
+    #resetViewBtn:hover { background: rgba(255,255,255,0.13); }
+
+    #legend {
+      position: absolute; bottom: 14px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px; opacity: 0.4; display: flex; gap: 16px;
+    }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🖊️ EvoDraw · Reviewer</h1>
+    <span id="status">connecting…</span>
+    <span id="zoomLabel">100%</span>
+    <span id="hint">Draw · Scroll to zoom · Space+drag to pan · Home to reset</span>
+  </header>
+
+  <div id="wrap">
+    <canvas id="canvas"></canvas>
+
+    <div id="watermark">
+      <h2>Presenter's Canvas</h2>
+      <p>Draw here — annotations appear on the overlay in real-time</p>
+    </div>
+
+    <div id="legend">
+      <span><span class="dot" style="background:#FF4466"></span>Your strokes</span>
+      <span><span class="dot" style="background:#4488FF"></span>Presenter / others</span>
+    </div>
+
+    <button id="resetViewBtn">⌂ Reset View</button>
+    <button id="clearBtn">🗑 Clear All</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const canvas     = document.getElementById('canvas');
+    const ctx        = canvas.getContext('2d');
+    const wrap       = document.getElementById('wrap');
+    const statusEl   = document.getElementById('status');
+    const zoomLabel  = document.getElementById('zoomLabel');
+
+    const MY_COLOR    = '#FF4466';
+    const OTHER_COLOR = '#4488FF';
+    const LINE_WIDTH  = 4;
+
+    // ── Viewport — same normalised system as Electron overlay ─────
+    // World coords {x, y} ∈ [0,1] x [0,1] — same as renderer/index.html
+    let nvx = 0, nvy = 0, vscale = 1;
+
+    // Strokes: arrays of {x, y} normalised world coords
+    // mine=true → draw in MY_COLOR, false → OTHER_COLOR
+    const allStrokes = [];
+    let current   = null;   // [{x,y}] currently drawing
+    let isDrawing = false;
+    let isPanning = false, spaceHeld = false;
+    let panX = 0, panY = 0;
+
+    // Screen pixel → normalised world coord (offsetX/Y since canvas is inside #wrap)
+    const toWorld = (ox, oy) => ({
+      x: (ox / canvas.width  - nvx) / vscale,
+      y: (oy / canvas.height - nvy) / vscale,
+    });
+
+    // ── resize ────────────────────────────────────────────────────
+    function resize() {
+      canvas.width  = wrap.clientWidth;
+      canvas.height = wrap.clientHeight;
+      redraw();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ── render ────────────────────────────────────────────────────
+    function redraw() {
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      ctx.save();
+      ctx.translate(nvx * W, nvy * H);
+      ctx.scale(vscale, vscale);
+
+      allStrokes.forEach(s => drawPts(s.pts, s.mine ? MY_COLOR : OTHER_COLOR));
+      if (current) drawPts(current, MY_COLOR);
+
+      ctx.restore();
+      zoomLabel.textContent = `${Math.round(vscale * 100)}%`;
+    }
+
+    function drawPts(pts, color) {
+      if (!pts || pts.length === 0) return;
+      const W = canvas.width, H = canvas.height;
+      const lw = LINE_WIDTH / vscale;
+      ctx.strokeStyle = color;
+      ctx.fillStyle   = color;
+      ctx.lineWidth   = lw;
+      ctx.lineCap     = 'round'; ctx.lineJoin = 'round';
+      ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 3 / vscale;
+
+      if (pts.length === 1) {
+        ctx.beginPath();
+        ctx.arc(pts[0].x * W, pts[0].y * H, lw / 2, 0, Math.PI * 2);
+        ctx.fill(); ctx.shadowBlur = 0; return;
+      }
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x * W, pts[0].y * H);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x * W, pts[i].y * H);
+      ctx.stroke(); ctx.shadowBlur = 0;
+    }
+
+    function emitViewport() {
+      socket.emit('viewport', { nvx, nvy, vscale });
+    }
+
+    // ── mouse ─────────────────────────────────────────────────────
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 1 || (e.button === 0 && spaceHeld)) {
+        isPanning = true; panX = e.clientX; panY = e.clientY;
+        canvas.style.cursor = 'grabbing';
+        e.preventDefault(); return;
+      }
+      if (e.button !== 0) return;
+      isDrawing = true;
+      current = [toWorld(e.offsetX, e.offsetY)];
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (isPanning) {
+        nvx += (e.clientX - panX) / canvas.width;
+        nvy += (e.clientY - panY) / canvas.height;
+        panX = e.clientX; panY = e.clientY;
+        redraw(); return;
+      }
+      if (!isDrawing) return;
+      current.push(toWorld(e.offsetX, e.offsetY));
+      redraw();
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      if (isPanning) {
+        isPanning = false;
+        canvas.style.cursor = spaceHeld ? 'grab' : 'crosshair';
+        emitViewport();
+        return;
+      }
+      if (!isDrawing || !current) return;
+      isDrawing = false;
+      allStrokes.push({ pts: current, mine: true });
+      socket.emit('stroke', current);   // {x,y} normalised world — same format as presenter
+      current = null;
+      redraw();
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      if (isDrawing && current && current.length > 0) {
+        isDrawing = false;
+        allStrokes.push({ pts: current, mine: true });
+        socket.emit('stroke', current);
+        current = null;
+        redraw();
+      }
+    });
+
+    // Scroll → zoom towards cursor
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      const ns  = Math.max(0.1, Math.min(10, vscale * factor));
+      const ncx = e.offsetX / canvas.width;
+      const ncy = e.offsetY / canvas.height;
+      nvx = ncx - (ncx - nvx) * (ns / vscale);
+      nvy = ncy - (ncy - nvy) * (ns / vscale);
+      vscale = ns;
+      redraw();
+      emitViewport();
+    }, { passive: false });
+
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !spaceHeld) {
+        spaceHeld = true; canvas.style.cursor = 'grab'; e.preventDefault();
+      }
+      if (e.code === 'Home') resetView();
+    });
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') {
+        spaceHeld = false; isPanning = false;
+        canvas.style.cursor = 'crosshair';
+      }
+    });
+
+    function resetView() {
+      nvx = 0; nvy = 0; vscale = 1;
+      redraw(); emitViewport();
+    }
+
+    document.getElementById('resetViewBtn').addEventListener('click', resetView);
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      allStrokes.length = 0; current = null;
+      socket.emit('clear');
+      redraw();
+    });
+
+    // ── Socket.IO ─────────────────────────────────────────────────
+    const socket = io();
+
+    socket.on('connect', () => {
+      statusEl.textContent = '● connected';
+      statusEl.className   = 'connected';
+    });
+    socket.on('disconnect', () => {
+      statusEl.textContent = '○ disconnected';
+      statusEl.className   = '';
+    });
+
+    // Sync existing state when joining
+    socket.on('sync', (strokes) => {
+      strokes.forEach(pts =>
+        allStrokes.push({ pts: pts.map(p => ({ x: p.x ?? p.nx, y: p.y ?? p.ny })), mine: false })
+      );
+      redraw();
+    });
+
+    socket.on('viewport', ({ nvx: rnvx, nvy: rnvy, vscale: rs }) => {
+      nvx = rnvx; nvy = rnvy; vscale = rs;
+      redraw();
+    });
+
+    socket.on('stroke', (pts) => {
+      allStrokes.push({ pts: pts.map(p => ({ x: p.x ?? p.nx, y: p.y ?? p.ny })), mine: false });
+      redraw();
+    });
+
+    socket.on('clear', () => {
+      allStrokes.length = 0; redraw();
+    });
+  </script>
+</body>
+</html>

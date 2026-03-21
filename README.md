@@ -2,9 +2,12 @@
 
 # evodraw
 
+## Cấu trúc dự án
+
+```text
 evodraw/
 ├── apps/
-│   ├── web/                          # React — Trình duyệt (người xem)
+│   ├── web/                          # React - Trình duyệt (người xem)
 │   │   ├── src/
 │   │   │   ├── components/
 │   │   │   ├── pages/
@@ -15,7 +18,7 @@ evodraw/
 │   │   │   └── main.jsx
 │   │   └── package.json
 │   │
-│   ├── desktop/                      # Electron — Người trình bày
+│   ├── desktop/                      # Electron - Người trình bày
 │   │   ├── src/
 │   │   │   ├── main/                 # Main process (Electron)
 │   │   │   │   ├── index.ts          # Entry point chính
@@ -50,10 +53,11 @@ evodraw/
 │   └── utils/                        # Hàm dùng chung
 │
 ├── pnpm-workspace.yaml
-├── package.json                      # Root — chạy script toàn bộ
+├── package.json                      # Root - chạy script toàn bộ
 └── README.md
+```
 
-# How to create
+## How to create
 ## Bước 1 — Tạo root project
 
 ```bash

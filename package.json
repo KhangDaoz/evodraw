@@ -1,10 +1,18 @@
 {
   "name": "evodraw",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev:web":     "pnpm --filter web dev",
-    "dev:server":  "pnpm --filter server dev",
-    "dev:desktop": "pnpm --filter desktop dev",
-    "dev":         "pnpm --parallel --filter web --filter server --filter desktop dev"
+    "dev:web": "npm run dev -w apps/web",
+    "dev:server": "npm run dev -w apps/server",
+    "dev:desktop": "npm run dev -w apps/desktop",
+    "dev": "concurrently -n web,server,desktop -c blue,green,magenta \"npm run dev:web\" \"npm run dev:server\" \"npm run dev:desktop\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.14"
   }
 }

@@ -21,92 +21,81 @@ evodraw/
 │   ├── desktop/                      # Electron - Người trình bày
 │   │   ├── src/
 │   │   │   ├── main/                 # Main process (Electron)
-│   │   │   │   ├── index.ts          # Entry point chính
-│   │   │   │   ├── screenCapture.ts  # Quay màn hình (desktopCapturer)
-│   │   │   │   └── ipc.ts            # IPC handlers
+│   │   │   │   ├── index.js          # Entry point chính
+│   │   │   │   ├── screenCapture.js  # Quay màn hình (desktopCapturer)
+│   │   │   │   └── ipc.js            # IPC handlers
 │   │   │   ├── renderer/             # Renderer process (UI)
 │   │   │   │   ├── components/
 │   │   │   │   ├── socket/           # Gửi tọa độ lên server
-│   │   │   │   └── App.tsx
-│   │   │   └── preload.ts
+│   │   │   │   └── App.jsx
+│   │   │   └── preload.js
 │   │   └── package.json
 │   │
 │   └── server/                       # Node.js + Express + Socket.io
 │       ├── src/
 │       │   ├── config/
-│       │   │   └── db.ts
+│       │   │   └── db.js
 │       │   ├── controllers/
 │       │   ├── models/
 │       │   ├── routes/
 │       │   ├── middlewares/
 │       │   ├── socket/               # Xử lý realtime
-│       │   │   ├── index.ts          # Khởi tạo Socket.io server
-│       │   │   ├── drawHandler.ts    # Nhận/phát tọa độ vẽ
-│       │   │   └── screenHandler.ts  # Nhận/phát stream màn hình
-│       │   └── server.ts
+│       │   │   ├── index.js          # Khởi tạo Socket.io server
+│       │   │   ├── drawHandler.js    # Nhận/phát tọa độ vẽ
+│       │   │   └── screenHandler.js  # Nhận/phát stream màn hình
+│       │   └── server.js
 │       └── package.json
 │
 ├── packages/                         # Code dùng chung
-│   ├── types/                        # TypeScript types/interfaces
-│   │   ├── socket-events.ts          # Định nghĩa tên events Socket.io
-│   │   └── drawing.ts                # Kiểu dữ liệu tọa độ, stroke...
+│   ├── types/                        # Shared constants/schemas (JS)
+│   │   ├── socket-events.js          # Định nghĩa tên events Socket.io
+│   │   └── drawing.js                # Cấu trúc dữ liệu tọa độ, stroke...
 │   └── utils/                        # Hàm dùng chung
 │
-├── pnpm-workspace.yaml
 ├── package.json                      # Root - chạy script toàn bộ
 └── README.md
 ```
 
-## How to create
+## How to create (npm workspace)
+
+> Mục tiêu: setup bản **JavaScript cơ bản** để dễ học trước (không dùng TypeScript).
+
 ## Bước 1 — Tạo root project
 
 ```bash
 mkdir evodraw && cd evodraw
-pnpm init
+npm init -y
 ```
 
 ---
 
-## Bước 2 — Tạo file `pnpm-workspace.yaml` thủ công
+## Bước 2 — Sửa root `package.json`
 
-**Không dùng lệnh echo**, thay vào đó tạo file trực tiếp:
-
-```bash
-touch pnpm-workspace.yaml
-```
-
-Mở file vừa tạo và dán nội dung sau vào (dùng bất kỳ text editor nào — VSCode, Notepad...):
-
-```yaml
-packages:
-  - "apps/*"
-  - "packages/*"
-```
-
-> ⚠️ Lưu ý: dùng **dấu ngoặc kép** `"`, không dùng dấu ngoặc đơn `'`
-
----
-
-## Bước 3 — Sửa root `package.json`
-
-Mở file `package.json` vừa được tạo, thay toàn bộ nội dung bằng:
+Mở file `package.json` và thay nội dung thành:
 
 ```json
 {
   "name": "evodraw",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev:web":     "pnpm --filter web dev",
-    "dev:server":  "pnpm --filter server dev",
-    "dev:desktop": "pnpm --filter desktop dev",
-    "dev":         "pnpm --parallel --filter web --filter server --filter desktop dev"
+    "dev:web": "npm run dev -w apps/web",
+    "dev:server": "npm run dev -w apps/server",
+    "dev:desktop": "npm run dev -w apps/desktop",
+    "dev": "concurrently -n web,server,desktop -c blue,green,magenta \"npm run dev:web\" \"npm run dev:server\" \"npm run dev:desktop\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
 ```
 
 ---
 
-## Bước 4 — Tạo thư mục gốc
+## Bước 3 — Tạo thư mục gốc
 
 ```bash
 mkdir -p apps packages
@@ -114,10 +103,10 @@ mkdir -p apps packages
 
 ---
 
-## Bước 5 — Khởi tạo Web
+## Bước 4 — Khởi tạo Web
 
 ```bash
-pnpm create vite@latest apps/web -- --template react-ts
+npm create vite@latest apps/web -- --template react
 ```
 
 Tạo thêm thư mục:
@@ -133,15 +122,15 @@ mkdir -p apps/web/src/canvas
 
 ---
 
-## Bước 6 — Khởi tạo Desktop (Electron)
+## Bước 5 — Khởi tạo Desktop (Electron)
 
 ```bash
-pnpm create @quick-start/electron@latest apps/desktop
+npm create @quick-start/electron@latest apps/desktop
 ```
 
 Khi được hỏi, chọn:
 - Framework: **React**
-- Language: **TypeScript**
+- Language: **JavaScript**
 
 Tạo thêm thư mục và file:
 
@@ -150,13 +139,14 @@ mkdir -p apps/desktop/src/main
 mkdir -p apps/desktop/src/renderer/components
 mkdir -p apps/desktop/src/renderer/socket
 
-touch apps/desktop/src/main/screenCapture.ts
-touch apps/desktop/src/main/ipc.ts
+touch apps/desktop/src/main/screenCapture.js
+touch apps/desktop/src/main/ipc.js
+
 ```
 
 ---
 
-## Bước 7 — Khởi tạo Server
+## Bước 6 — Khởi tạo Server
 
 ```bash
 mkdir -p apps/server/src/config
@@ -167,14 +157,15 @@ mkdir -p apps/server/src/middlewares
 mkdir -p apps/server/src/socket
 ```
 
-Tạo `apps/server/package.json` — mở file và dán vào:
+Tạo `apps/server/package.json`:
 
 ```json
 {
   "name": "server",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "dev": "nodemon src/server.ts"
+    "dev": "nodemon src/server.js"
   },
   "dependencies": {},
   "devDependencies": {}
@@ -184,16 +175,16 @@ Tạo `apps/server/package.json` — mở file và dán vào:
 Tạo các file:
 
 ```bash
-touch apps/server/src/config/db.ts
-touch apps/server/src/socket/index.ts
-touch apps/server/src/socket/drawHandler.ts
-touch apps/server/src/socket/screenHandler.ts
-touch apps/server/src/server.ts
+touch apps/server/src/config/db.js
+touch apps/server/src/socket/index.js
+touch apps/server/src/socket/drawHandler.js
+touch apps/server/src/socket/screenHandler.js
+touch apps/server/src/server.js
 ```
 
 ---
 
-## Bước 8 — Khởi tạo Shared Packages
+## Bước 7 — Khởi tạo Shared Packages
 
 ```bash
 mkdir -p packages/types
@@ -206,7 +197,8 @@ Tạo `packages/types/package.json`:
 {
   "name": "@evodraw/types",
   "version": "1.0.0",
-  "main": "index.ts"
+  "private": true,
+  "main": "index.js"
 }
 ```
 
@@ -216,51 +208,65 @@ Tạo `packages/utils/package.json`:
 {
   "name": "@evodraw/utils",
   "version": "1.0.0",
-  "main": "index.ts"
+  "private": true,
+  "main": "index.js"
 }
 ```
 
 Tạo các file:
 
 ```bash
-touch packages/types/index.ts
-touch packages/types/socket-events.ts
-touch packages/types/drawing.ts
-touch packages/utils/index.ts
+touch packages/types/index.js
+touch packages/types/socket-events.js
+touch packages/types/drawing.js
+touch packages/utils/index.js
 ```
 
 ---
 
-## Bước 9 — Liên kết shared packages
+## Bước 8 — Liên kết shared packages
 
 ```bash
-pnpm add @evodraw/types --filter web
-pnpm add @evodraw/types --filter server
-pnpm add @evodraw/types --filter desktop
+npm install @evodraw/types -w apps/web
+npm install @evodraw/types -w apps/server
+npm install @evodraw/types -w apps/desktop
 ```
 
 ---
 
-## Bước 10 — Cài dependencies
+## Bước 9 — Cài dependencies
 
 ```bash
 # Server
-pnpm add express socket.io mongoose --filter server
-pnpm add -D typescript ts-node nodemon @types/express @types/node --filter server
+npm install express socket.io mongoose -w apps/server
+npm install -D nodemon -w apps/server
 
 # Web
-pnpm add socket.io-client --filter web
+npm install socket.io-client -w apps/web
 
 # Desktop
-pnpm add socket.io-client --filter desktop
+npm install socket.io-client -w apps/desktop
 ```
 
 ---
 
-## Bước 11 — Cài tất cả
+## Bước 10 — Cài tất cả
 
 ```bash
-pnpm install
+npm install
+```
+
+---
+
+## Bước 11 — Chạy project
+
+```bash
+npm run dev:web
+npm run dev:server
+npm run dev:desktop
+
+# Chạy đồng thời cả 3 app
+npm run dev
 ```
 
 ---

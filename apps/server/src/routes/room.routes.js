@@ -1,12 +1,13 @@
-const express = require('express');
+import express from 'express';
+import { createRoom, joinRoom } from '../controllers/room.controller.js';
+import { validateCreateRoom, validateJoinRoom } from '../middlewares/room.middleware.js';
+
 const router = express.Router();
-const roomController = require('../controllers/room.controller');
-const roomMiddleware = require('../middlewares/room.middleware');
 
 // POST /api/rooms - Create a new room
-router.post('/', roomMiddleware.validateCreateRoom, roomController.createRoom);
+router.post('/', validateCreateRoom, createRoom);
 
 // POST /api/rooms/join - Join a room securely using code and passcode
-router.post('/join', roomMiddleware.validateJoinRoom, roomController.joinRoom);
+router.post('/join', validateJoinRoom, joinRoom);
 
-module.exports = router;
+export default router;

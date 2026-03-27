@@ -1,4 +1,4 @@
-function validateCreateRoom(req, res, next) {
+export function validateCreateRoom(req, res, next) {
     const { name } = req.body || {};
     
     if (name && (typeof name !== 'string' || name.length > 50)) {
@@ -8,7 +8,7 @@ function validateCreateRoom(req, res, next) {
     next();
 }
 
-function validateJoinRoom(req, res, next) {
+export function validateJoinRoom(req, res, next) {
     const { code, passcode } = req.body || {};
     
     if (!code || typeof code !== 'string' || code.length !== 6) {
@@ -23,7 +23,4 @@ function validateJoinRoom(req, res, next) {
     next();
 }
 
-module.exports = {
-    validateCreateRoom,
-    validateJoinRoom
-};
+

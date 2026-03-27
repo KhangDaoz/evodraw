@@ -1,5 +1,5 @@
-const Room = require('../models/Room');
-const crypto = require('crypto');
+import Room from '../models/Room.js';
+import crypto from 'crypto';
 
 // Utility to generate a 6-character uppercase alphanumeric code
 function generateRoomCode() {
@@ -11,7 +11,7 @@ function generateRoomPasscode() {
     return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-async function createRoom(req, res) {
+export async function createRoom(req, res) {
     try {
         const { name } = req.body || {};
         
@@ -57,7 +57,7 @@ async function createRoom(req, res) {
     }
 }
 
-async function joinRoom(req, res) {
+export async function joinRoom(req, res) {
     try {
         const { code, passcode } = req.body || {};
 
@@ -80,7 +80,4 @@ async function joinRoom(req, res) {
     }
 }
 
-module.exports = {
-    createRoom,
-    joinRoom
-};
+

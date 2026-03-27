@@ -1,11 +1,11 @@
-const { MongoClient } = require('mongodb');
+import { MongoClient } from 'mongodb';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/evodraw';
 const client = new MongoClient(uri);
 
 let db;
 
-async function connectDB() {
+export async function connectDB() {
     try {
         await client.connect();
         db = client.db();
@@ -25,11 +25,11 @@ async function connectDB() {
     }
 }
 
-function getDB() {
+export function getDB() {
     if (!db) {
         throw new Error('Database not initialized. Call connectDB first.');
     }
     return db;
 }
 
-module.exports = { connectDB, getDB, client };
+export const clientInstance = client;

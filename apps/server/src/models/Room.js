@@ -1,4 +1,4 @@
-const { getDB } = require('../config/db');
+import { getDB } from '../config/db.js';
 
 class Room {
     static getCollection() {
@@ -35,4 +35,4 @@ class Room {
     }
 }
 
-module.exports = Room;
+export default Room;

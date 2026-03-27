@@ -1,8 +1,8 @@
-require('dotenv').config();
+import 'dotenv/config';
 
-const express = require('express');
-const { connectDB } = require('./config/db');
-const roomRoutes = require('./routes/room.routes');
+import express from 'express';
+import { connectDB } from './config/db.js';
+import roomRoutes from './routes/room.routes.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;

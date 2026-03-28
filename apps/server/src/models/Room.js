@@ -1,3 +1,4 @@
+import { ObjectId } from 'mongodb';
 import { getDB } from '../config/db.js';
 
 class Room {
@@ -26,10 +27,20 @@ class Room {
         return await collection.findOne({ code, passcode });
     }
 
-    static async touch(code) {
+    static async touch(roomIdentifier) {
         const collection = this.getCollection();
+        const normalized = String(roomIdentifier || '').trim();
+
+        if (!normalized) {
+            return { matchedCount: 0, modifiedCount: 0 };
+        }
+
+        const query = ObjectId.isValid(normalized)
+            ? { $or: [{ code: normalized.toUpperCase() }, { _id: new ObjectId(normalized) }] }
+            : { code: normalized.toUpperCase() };
+
         return await collection.updateOne(
-            { code },
+            query,
             { $set: { updatedAt: new Date() } }
         );
     }

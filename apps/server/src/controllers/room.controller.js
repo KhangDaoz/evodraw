@@ -13,8 +13,6 @@ function generateRoomPasscode() {
 
 export async function createRoom(req, res) {
     try {
-        const { name } = req.body || {};
-        
         let code = generateRoomCode();
         let isUnique = false;
         let attempts = 0;
@@ -37,7 +35,6 @@ export async function createRoom(req, res) {
         const passcode = generateRoomPasscode();
 
         const newRoom = {
-            name: name || `Room-${code}`,
             code: code,
             passcode: passcode,
         };

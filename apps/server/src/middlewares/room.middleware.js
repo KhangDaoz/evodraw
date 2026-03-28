@@ -1,10 +1,4 @@
 export function validateCreateRoom(req, res, next) {
-    const { name } = req.body || {};
-    
-    if (name && (typeof name !== 'string' || name.length > 50)) {
-        return res.status(400).json({ success: false, message: 'Invalid format: "name" must be a string under 50 characters.' });
-    }
-    
     next();
 }
 

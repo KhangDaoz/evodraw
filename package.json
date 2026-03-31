@@ -2,21 +2,14 @@
   "name": "evodraw",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/*"
   ],
   "scripts": {
     "dev:web": "npm run dev -w apps/web",
     "dev:server": "npm run dev -w apps/server",
-    "dev:desktop": "npm run dev -w apps/desktop",
-    "dev": "concurrently -n web,server,desktop -c blue,green,magenta \"npm run dev:web\" \"npm run dev:server\" \"npm run dev:desktop\""
+    "dev": "concurrently -n web,server -c blue,green \"npm run dev:web\" \"npm run dev:server\""
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
-    "nodemon": "^3.1.14"
-  },
-  "dependencies": {
-    "mongodb": "^7.1.1",
-    "socket.io": "^4.8.3"
+    "concurrently": "^9.2.1"
   }
 }

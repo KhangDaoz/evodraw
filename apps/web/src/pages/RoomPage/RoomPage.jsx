@@ -17,11 +17,16 @@ export default function RoomPage() {
   const username = location.state?.username || localStorage.getItem('evodraw_username') || generateAnonymousName()
   const [passcode] = useState(location.state?.passcode || '')
   const [activeTool, setActiveTool] = useState('pen')
+  const [strokeColor, setStrokeColor] = useState('#000000')
+  const [strokeWidth, setStrokeWidth] = useState(5)
 
-  // Clear passcode from history immediately to prevent 'Forward' or reload bypass
+  // Clear passcode from history securely, bypassing StrictMode double-mount issues
   useEffect(() => {
     if (location.state?.passcode) {
-      navigate('.', { replace: true, state: { ...location.state, passcode: '' } })
+      const timer = setTimeout(() => {
+        navigate('.', { replace: true, state: { ...location.state, passcode: '' } })
+      }, 500)
+      return () => clearTimeout(timer)
     }
   }, [navigate, location.state])
 
@@ -46,11 +51,19 @@ export default function RoomPage() {
 
   return (
     <div className="room-page">
-      <Canvas />
+      <Canvas 
+        activeTool={activeTool} 
+        strokeColor={strokeColor} 
+        strokeWidth={strokeWidth} 
+      />
 
       <Toolbar
         activeTool={activeTool}
         onToolSelect={setActiveTool}
+        strokeColor={strokeColor}
+        onColorChange={setStrokeColor}
+        strokeWidth={strokeWidth}
+        onWidthChange={setStrokeWidth}
         showHint={false}
       />
 

@@ -1,6 +1,9 @@
 /* === Canvas Container === */
 
-.canvas-container {
+.evodraw-canvas-area {
+  --zoom: 1;
+  --pan-x: 0px;
+  --pan-y: 0px;
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -9,8 +12,20 @@
 .canvas-dot-grid {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(circle, #dcdce4 1px, transparent 1px);
-  background-size: 20px 20px;
+  --dot-color-main: rgba(180, 180, 190, 1);
+  --dot-color-sub: rgba(180, 180, 190, var(--sub-opacity, 0));
+  
+  background-image: 
+    radial-gradient(circle, var(--dot-color-sub) 1px, transparent 1px),
+    radial-gradient(circle, var(--dot-color-main) 1.5px, transparent 1.5px);
+    
+  background-size: 
+    var(--spacing-sub) var(--spacing-sub),
+    var(--spacing-main) var(--spacing-main);
+    
+  background-position: 
+    calc(var(--pan-x) - var(--spacing-sub) / 2) calc(var(--pan-y) - var(--spacing-sub) / 2),
+    calc(var(--pan-x) - var(--spacing-main) / 2) calc(var(--pan-y) - var(--spacing-main) / 2);
   pointer-events: none;
   z-index: 0;
 }

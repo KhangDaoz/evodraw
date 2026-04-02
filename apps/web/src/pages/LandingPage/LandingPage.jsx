@@ -11,6 +11,8 @@ import './LandingPage.css'
 export default function LandingPage() {
   const navigate = useNavigate()
   const [activeTool, setActiveTool] = useState(null)
+  const [strokeColor, setStrokeColor] = useState('#000000')
+  const [strokeWidth, setStrokeWidth] = useState(5)
   const [showOverlay, setShowOverlay] = useState(true)
   const location = useLocation()
   const [roomCode, setRoomCode] = useState(location.state?.roomCode || '')
@@ -29,10 +31,9 @@ export default function LandingPage() {
     try {
       const res = await createRoom()
       const { code, passcode: newPasscode } = res.data // code and passcode from server
-      const passToUse = passcode || newPasscode // use input if exists or generated
       const username = localStorage.getItem('evodraw_username') || generateAnonymousName()
       navigate(`/room/${code}`, {
-        state: { passcode: passToUse, username }
+        state: { passcode: newPasscode, username }
       })
     } catch (err) {
       setError(err.message)
@@ -83,11 +84,19 @@ export default function LandingPage() {
 
   return (
     <div className="room-page" onClick={handleCanvasClick}>
-      <Canvas />
+      <Canvas 
+        activeTool={activeTool}
+        strokeColor={strokeColor} 
+        strokeWidth={strokeWidth} 
+      />
 
       <Toolbar
         activeTool={activeTool}
         onToolSelect={handleToolSelect}
+        strokeColor={strokeColor}
+        onColorChange={setStrokeColor}
+        strokeWidth={strokeWidth}
+        onWidthChange={setStrokeWidth}
         showHint={showOverlay}
       />
 

@@ -1,20 +1,22 @@
 import { useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { joinRoom, createRoom } from '../../services/api'
 import Toolbar from '../../components/Toolbar/Toolbar'
 import BottomBar from '../../components/BottomBar/BottomBar'
 import Canvas from '../../components/Canvas/Canvas'
 import SettingsPanel from '../../components/SettingsPanel/SettingsPanel'
+import { generateAnonymousName } from '../../utils/nameGenerator'
 import './LandingPage.css'
 
 export default function LandingPage() {
   const navigate = useNavigate()
   const [activeTool, setActiveTool] = useState(null)
   const [showOverlay, setShowOverlay] = useState(true)
-  const [roomCode, setRoomCode] = useState('')
+  const location = useLocation()
+  const [roomCode, setRoomCode] = useState(location.state?.roomCode || '')
   const [passcode, setPasscode] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(location.state?.error || '')
 
   const dismissOverlay = useCallback(() => {
     if (showOverlay) setShowOverlay(false)
@@ -28,7 +30,7 @@ export default function LandingPage() {
       const res = await createRoom()
       const { code, passcode: newPasscode } = res.data // code and passcode from server
       const passToUse = passcode || newPasscode // use input if exists or generated
-      const username = localStorage.getItem('evodraw_username') || `User-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+      const username = localStorage.getItem('evodraw_username') || generateAnonymousName()
       navigate(`/room/${code}`, {
         state: { passcode: passToUse, username }
       })
@@ -68,7 +70,7 @@ export default function LandingPage() {
 
     try {
       await joinRoom(roomCode.trim(), passcode.trim())
-      const username = localStorage.getItem('evodraw_username') || `User-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+      const username = localStorage.getItem('evodraw_username') || generateAnonymousName()
       navigate(`/room/${roomCode.trim().toUpperCase()}`, {
         state: { passcode: passcode.trim(), username }
       })

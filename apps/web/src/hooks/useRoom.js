@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket'
 
-export default function useRoom(roomCode, username) {
+export default function useRoom(roomCode, username, passcode) {
   const [isConnected, setIsConnected] = useState(false)
   const [connectedUsers, setConnectedUsers] = useState([])
   const [error, setError] = useState(null)
@@ -13,10 +13,10 @@ export default function useRoom(roomCode, username) {
 
     if (!hasJoined.current && roomCode && username) {
       const socket = getSocket()
-      socket.emit('join_room', { roomId: roomCode, username })
+      socket.emit('join_room', { roomId: roomCode, username, passcode })
       hasJoined.current = true
     }
-  }, [roomCode, username])
+  }, [roomCode, username, passcode])
 
   const handleDisconnect = useCallback((reason) => {
     setIsConnected(false)
@@ -41,6 +41,17 @@ export default function useRoom(roomCode, username) {
     setConnectedUsers((prev) => prev.filter((u) => u !== leftUser))
   }, [])
 
+  const handleRoomUsers = useCallback(({ users }) => {
+    // Server sends the full authoritative list; exclude self
+    setConnectedUsers(users.filter((u) => u !== username))
+  }, [username])
+
+  const handleRoomError = useCallback((err) => {
+    setError(`Access Denied: ${err.message}`)
+    setIsConnected(false)
+    hasJoined.current = false
+  }, [])
+
   useEffect(() => {
     if (!roomCode || !username) return
 
@@ -51,10 +62,12 @@ export default function useRoom(roomCode, username) {
     socket.on('connect_error', handleConnectError)
     socket.on('user_joined', handleUserJoined)
     socket.on('user_left', handleUserLeft)
+    socket.on('room_users', handleRoomUsers)
+    socket.on('room_error', handleRoomError)
 
     // If already connected when hook mounts
     if (socket.connected && !hasJoined.current) {
-      socket.emit('join_room', { roomId: roomCode, username })
+      socket.emit('join_room', { roomId: roomCode, username, passcode })
       hasJoined.current = true
       setIsConnected(true)
     }
@@ -68,11 +81,13 @@ export default function useRoom(roomCode, username) {
         s.off('connect_error', handleConnectError)
         s.off('user_joined', handleUserJoined)
         s.off('user_left', handleUserLeft)
+        s.off('room_users', handleRoomUsers)
+        s.off('room_error', handleRoomError)
       }
       hasJoined.current = false
       disconnectSocket()
     }
-  }, [roomCode, username, handleConnect, handleDisconnect, handleConnectError, handleUserJoined, handleUserLeft])
+  }, [roomCode, username, passcode, handleConnect, handleDisconnect, handleConnectError, handleUserJoined, handleUserLeft, handleRoomUsers, handleRoomError])
 
   return { isConnected, connectedUsers, error }
 }

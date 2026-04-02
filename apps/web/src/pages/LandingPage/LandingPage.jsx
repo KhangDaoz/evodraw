@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { joinRoom } from '../../services/api'
+import { joinRoom, createRoom } from '../../services/api'
 import Toolbar from '../../components/Toolbar/Toolbar'
 import BottomBar from '../../components/BottomBar/BottomBar'
 import Canvas from '../../components/Canvas/Canvas'
@@ -20,13 +20,39 @@ export default function LandingPage() {
     if (showOverlay) setShowOverlay(false)
   }, [showOverlay])
 
-  const handleToolSelect = (toolId) => {
-    setActiveTool(toolId)
-    dismissOverlay()
+  const handleInteractionCreateRoom = async () => {
+    if (loading) return
+    setLoading(true)
+    setError('')
+    try {
+      const res = await createRoom()
+      const { code, passcode: newPasscode } = res.data // code and passcode from server
+      const passToUse = passcode || newPasscode // use input if exists or generated
+      const username = localStorage.getItem('evodraw_username') || `User-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+      navigate(`/room/${code}`, {
+        state: { passcode: passToUse, username }
+      })
+    } catch (err) {
+      setError(err.message)
+      setLoading(false)
+    }
   }
 
-  const handleCanvasClick = () => {
-    dismissOverlay()
+  const handleToolSelect = (toolId) => {
+    setActiveTool(toolId)
+    if (showOverlay) {
+      handleInteractionCreateRoom()
+    } else {
+      dismissOverlay()
+    }
+  }
+
+  const handleCanvasClick = (e) => {
+    if (showOverlay) {
+      handleInteractionCreateRoom()
+    } else {
+      dismissOverlay()
+    }
   }
 
   const handleJoinRoom = async (e) => {

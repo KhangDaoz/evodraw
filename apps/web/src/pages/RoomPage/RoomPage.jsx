@@ -52,7 +52,8 @@ export default function RoomPage() {
   return (
     <div className="room-page">
       <Canvas 
-        activeTool={activeTool} 
+        activeTool={activeTool}
+        onToolSelect={setActiveTool}
         strokeColor={strokeColor} 
         strokeWidth={strokeWidth} 
       />

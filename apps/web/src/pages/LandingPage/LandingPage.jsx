@@ -50,7 +50,7 @@ export default function LandingPage() {
     }
   }
 
-  const handleCanvasClick = (e) => {
+  const handleCanvasClick = () => {
     if (showOverlay) {
       handleInteractionCreateRoom()
     } else {

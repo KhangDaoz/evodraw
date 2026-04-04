@@ -1,7 +1,17 @@
 import './Toolbar.css'
 
 /* Tool definitions with SVG icons */
-const tools = [
+const mainTools = [
+  {
+    id: 'select',
+    label: 'Select',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+        <path d="M13 13l6 6" />
+      </svg>
+    ),
+  },
   {
     id: 'pen',
     label: 'Pen',
@@ -12,22 +22,43 @@ const tools = [
       </svg>
     ),
   },
-
   {
-    id: 'line',
-    label: 'Line',
-    icon: (   
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <line x1="5" y1="19" x2="19" y2="5" />
+    id: 'eraser',
+    label: 'Eraser',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 20H7L3 16a1.4 1.4 0 0 1 0-2L13 4a1.4 1.4 0 0 1 2 0L20 9a1.4 1.4 0 0 1 0 2L11 20" />
+        <path d="M10 11l4 4" />
+      </svg>
+    ),
+  }
+]
+
+const shapeTools = [
+  {
+    id: 'rectangle',
+    label: 'Rectangle',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
       </svg>
     ),
   },
   {
-    id: 'diamond',
-    label: 'Diamond',
+    id: 'circle',
+    label: 'Circle',
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
-        <path d="M12 3L21 12L12 21L3 12Z" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+      </svg>
+    ),
+  },
+  {
+    id: 'line',
+    label: 'Line',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <line x1="5" y1="19" x2="19" y2="5" />
       </svg>
     ),
   },
@@ -40,19 +71,10 @@ const tools = [
         <polyline points="10 5 19 5 19 14" />
       </svg>
     ),
-  },
-  {
-    id: 'frame',
-    label: 'Frame',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-      </svg>
-    ),
-  },
+  }
 ]
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const PRESET_COLORS = [
   '#1a1a1a', // Near black
@@ -67,39 +89,101 @@ const PRESET_COLORS = [
 
 const PRESET_STROKES = [
   { label: 'XS', value: 2 },
-  { label: 'S',  value: 5 },
-  { label: 'M',  value: 10 },
-  { label: 'L',  value: 20 },
+  { label: 'S', value: 5 },
+  { label: 'M', value: 10 },
+  { label: 'L', value: 20 },
 ]
 
-export default function Toolbar({ 
-  activeTool, 
-  onToolSelect, 
+export default function Toolbar({
+  activeTool,
+  onToolSelect,
   strokeColor,
   onColorChange,
   strokeWidth,
   onWidthChange,
-  showHint 
+  showHint
 }) {
   const [showOptions, setShowOptions] = useState(false)
+  const [showShapeOptions, setShowShapeOptions] = useState(false)
+  const [lastUsedShape, setLastUsedShape] = useState('rectangle')
+
+  const isShapeActive = shapeTools.some(t => t.id === activeTool)
+  const currentShapeId = isShapeActive ? activeTool : lastUsedShape
+  const currentShapeTool = shapeTools.find(t => t.id === currentShapeId)
+
+  useEffect(() => {
+    if (isShapeActive && activeTool !== lastUsedShape) {
+      setLastUsedShape(activeTool)
+    }
+  }, [activeTool, isShapeActive, lastUsedShape])
 
   return (
     <div className="toolbar-area">
       {/* Tool buttons */}
-      <nav className="toolbar">
-        {tools.map((tool) => (
+      <nav className="toolbar" style={{ position: 'relative' }}>
+        {mainTools.map((tool) => (
           <button
             key={tool.id}
             className={`tool-btn ${activeTool === tool.id ? 'active' : ''}`}
             onClick={(e) => {
               e.stopPropagation()
               onToolSelect(tool.id)
+              setShowShapeOptions(false)
             }}
             title={tool.label}
           >
             {tool.icon}
           </button>
         ))}
+
+        {/* Shape Menu Toggle */}
+        <div style={{ position: 'relative' }}>
+          <button
+            className={`tool-btn ${isShapeActive ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!isShapeActive) {
+                onToolSelect(currentShapeId)
+              }
+              setShowShapeOptions(!showShapeOptions)
+            }}
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+              setShowShapeOptions(!showShapeOptions)
+            }}
+            title="Shapes"
+          >
+            {currentShapeTool.icon}
+            <span style={{ position: 'absolute', bottom: 2, right: 2, fontSize: '0.6em', opacity: 0.7 }}>▾</span>
+          </button>
+
+          {/* Submenu for shapes */}
+          {showShapeOptions && (
+            <div className="toolbar animate-fade-in" style={{
+              position: 'absolute',
+              left: '100%',
+              top: 0,
+              marginLeft: '8px',
+              flexDirection: 'row',
+              padding: '4px'
+            }}>
+              {shapeTools.map((tool) => (
+                <button
+                  key={tool.id}
+                  className={`tool-btn ${activeTool === tool.id ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToolSelect(tool.id)
+                    setShowShapeOptions(false)
+                  }}
+                  title={tool.label}
+                >
+                  {tool.icon}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {/* Options Toggle currently showing the active stroke color */}
         <button
           className={`tool-btn ${showOptions ? 'active' : ''}`}
@@ -140,7 +224,7 @@ export default function Toolbar({
                   style={{ opacity: 0, position: 'absolute', width: 0, height: 0 }}
                 />
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M8 2v12M2 8h12" strokeLinecap="round"/>
+                  <path d="M8 2v12M2 8h12" strokeLinecap="round" />
                 </svg>
               </label>
             </div>

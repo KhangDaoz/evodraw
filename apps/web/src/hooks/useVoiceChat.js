@@ -8,13 +8,18 @@ const ICE_SERVERS = {
   ]
 };
 
-export default function useVoiceChat(roomId, username) {
+export default function useVoiceChat(roomId, currentUsername) {
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [streams, setStreams] = useState({}); // { socketId: MediaStream }
   
   const localStreamRef = useRef(null);
   const peersRef = useRef({}); // { socketId: RTCPeerConnection }
   
+  const usernameRef = useRef(currentUsername);
+  useEffect(() => {
+    usernameRef.current = currentUsername;
+  }, [currentUsername]);
+
   // Cleanup a specific peer connection
   const cleanupPeer = useCallback((socketId) => {
     if (peersRef.current[socketId]) {
@@ -135,7 +140,7 @@ export default function useVoiceChat(roomId, username) {
         socket.emit('webrtc:offer', { 
           targetSocketId: socketId, 
           offer,
-          senderName: username 
+          senderName: usernameRef.current 
         });
       } catch (err) {
         console.error("Error creating WebRTC offer", err);
@@ -200,7 +205,8 @@ export default function useVoiceChat(roomId, username) {
       socket.off('webrtc:ice-candidate', handleReceiveIceCandidate);
       cleanupAll();
     };
-  }, [createPeerConnection, cleanupPeer, cleanupAll, username]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createPeerConnection, cleanupPeer, cleanupAll]);
 
   return {
     isVoiceActive,

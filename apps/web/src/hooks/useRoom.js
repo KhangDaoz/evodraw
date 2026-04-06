@@ -1,22 +1,28 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket'
 
-export default function useRoom(roomCode, username, passcode) {
+export default function useRoom(roomCode, currentUsername, passcode) {
   const [isConnected, setIsConnected] = useState(false)
   const [connectedUsers, setConnectedUsers] = useState([])
   const [error, setError] = useState(null)
   const hasJoined = useRef(false)
+  
+  const usernameRef = useRef(currentUsername)
+
+  useEffect(() => {
+    usernameRef.current = currentUsername
+  }, [currentUsername])
 
   const handleConnect = useCallback(() => {
     setIsConnected(true)
     setError(null)
 
-    if (!hasJoined.current && roomCode && username) {
+    if (!hasJoined.current && roomCode && usernameRef.current) {
       const socket = getSocket()
-      socket.emit('join_room', { roomId: roomCode, username, passcode })
+      socket.emit('join_room', { roomId: roomCode, username: usernameRef.current, passcode })
       hasJoined.current = true
     }
-  }, [roomCode, username, passcode])
+  }, [roomCode, passcode])
 
   const handleDisconnect = useCallback((reason) => {
     setIsConnected(false)
@@ -43,8 +49,8 @@ export default function useRoom(roomCode, username, passcode) {
 
   const handleRoomUsers = useCallback(({ users }) => {
     // Server sends the full authoritative list; exclude self
-    setConnectedUsers(users.filter((u) => u !== username))
-  }, [username])
+    setConnectedUsers(users.filter((u) => u !== usernameRef.current))
+  }, [])
 
   const handleRoomError = useCallback((err) => {
     setError(`Access Denied: ${err.message}`)
@@ -52,8 +58,16 @@ export default function useRoom(roomCode, username, passcode) {
     hasJoined.current = false
   }, [])
 
+  const updateUsername = useCallback((newUsername) => {
+    usernameRef.current = newUsername
+    const socket = getSocket()
+    if (socket && isConnected) {
+      socket.emit('update_username', { roomId: roomCode, newUsername })
+    }
+  }, [roomCode, isConnected])
+
   useEffect(() => {
-    if (!roomCode || !username) return
+    if (!roomCode || !usernameRef.current) return
 
     const socket = connectSocket()
 
@@ -67,7 +81,7 @@ export default function useRoom(roomCode, username, passcode) {
 
     // If already connected when hook mounts
     if (socket.connected && !hasJoined.current) {
-      socket.emit('join_room', { roomId: roomCode, username, passcode })
+      socket.emit('join_room', { roomId: roomCode, username: usernameRef.current, passcode })
       hasJoined.current = true
       setIsConnected(true)
     }
@@ -75,7 +89,7 @@ export default function useRoom(roomCode, username, passcode) {
     return () => {
       const s = getSocket()
       if (s) {
-        s.emit('leave_room', { roomId: roomCode, username })
+        s.emit('leave_room', { roomId: roomCode, username: usernameRef.current })
         s.off('connect', handleConnect)
         s.off('disconnect', handleDisconnect)
         s.off('connect_error', handleConnectError)
@@ -87,7 +101,9 @@ export default function useRoom(roomCode, username, passcode) {
       hasJoined.current = false
       disconnectSocket()
     }
-  }, [roomCode, username, passcode, handleConnect, handleDisconnect, handleConnectError, handleUserJoined, handleUserLeft, handleRoomUsers, handleRoomError])
+    // Only bind on mount/unmount and static refs/handlers, excluding dynamic values like currentUsername
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode, passcode, handleConnect, handleDisconnect, handleConnectError, handleUserJoined, handleUserLeft, handleRoomUsers, handleRoomError])
 
-  return { isConnected, connectedUsers, error }
+  return { isConnected, connectedUsers, error, updateUsername }
 }

@@ -16,7 +16,7 @@ export default function RoomPage() {
   const { roomCode } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
-  const username = location.state?.username || localStorage.getItem('evodraw_username') || generateAnonymousName()
+  const [username, setUsername] = useState(() => location.state?.username || localStorage.getItem('evodraw_username') || generateAnonymousName())
   const [passcode] = useState(location.state?.passcode || '')
   const [activeTool, setActiveTool] = useState('pen')
   const [strokeColor, setStrokeColor] = useState('#000000')
@@ -33,7 +33,7 @@ export default function RoomPage() {
     }
   }, [navigate, location.state])
 
-  const { isConnected, connectedUsers, error } = useRoom(roomCode, username, passcode)
+  const { isConnected, connectedUsers, error, updateUsername } = useRoom(roomCode, username, passcode)
   
   // Real-time Chat
   const { messages, sendMessage } = useChat(roomCode, username)
@@ -58,6 +58,12 @@ export default function RoomPage() {
     navigate('/', { replace: true })
   }
 
+  const handleUsernameChange = (newName) => {
+    setUsername(newName)
+    localStorage.setItem('evodraw_username', newName)
+    updateUsername(newName)
+  }
+
   return (
     <div className="room-page">
       <Canvas
@@ -66,6 +72,8 @@ export default function RoomPage() {
         strokeColor={strokeColor}
         strokeWidth={strokeWidth}
         roomId={roomCode}
+        username={username}
+        isConnected={isConnected}
       />
 
       <Toolbar
@@ -94,6 +102,8 @@ export default function RoomPage() {
         roomCode={roomCode}
         passcode={passcode}
         onLeaveRoom={handleLeaveRoom}
+        username={username}
+        onUsernameChange={handleUsernameChange}
       />
 
       {error && (

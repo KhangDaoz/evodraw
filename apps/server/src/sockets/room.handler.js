@@ -42,6 +42,25 @@ export const registerRoomHandlers = (io, socket) => {
         broadcastRoomUsers(io, roomId);
     });
 
+    socket.on('update_username', ({ roomId, newUsername }) => {
+        if (!roomId || !newUsername) return;
+        
+        const oldUsername = socket.data.username;
+        socket.data.username = newUsername;
+        
+        if (roomMembers.has(roomId)) {
+            roomMembers.get(roomId).set(socket.id, newUsername);
+        }
+
+        console.log(`User ${oldUsername} changed name to ${newUsername} in room ${roomId}`);
+        
+        // Broadcast the new name to others
+        socket.to(roomId).emit('user_name_changed', { socketId: socket.id, oldUsername, newUsername });
+        
+        // Broadcast updated user list
+        broadcastRoomUsers(io, roomId);
+    });
+
     socket.on('leave_room', ({ roomId, username }) => {
         socket.leave(roomId);
         roomMembers.get(roomId)?.delete(socket.id);

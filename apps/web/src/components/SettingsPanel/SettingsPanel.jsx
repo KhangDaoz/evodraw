@@ -16,22 +16,23 @@ const BG_COLORS = [
   { id: 'mint', value: '#e0f2f1' },
 ]
 
-const USERNAME_KEY = 'evodraw_username'
-
-export default function SettingsPanel({ roomCode, passcode, onLeaveRoom }) {
+export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, username, onUsernameChange }) {
   const [isOpen, setIsOpen] = useState(false)
-  const [username, setUsername] = useState(() => localStorage.getItem(USERNAME_KEY) || 'Username')
+  const [localUsername, setLocalUsername] = useState(username || 'Username')
   const [theme, setTheme] = useState('light')
   const [selectedBg, setSelectedBg] = useState('default')
   const [showPin, setShowPin] = useState(false)
   const panelRef = useRef(null)
 
-  // Persist username
+  // Persist username externally with debounce
   useEffect(() => {
-    if (username.trim()) {
-      localStorage.setItem(USERNAME_KEY, username.trim())
+    if (localUsername.trim() && localUsername !== username) {
+      const timer = setTimeout(() => {
+        if (onUsernameChange) onUsernameChange(localUsername.trim())
+      }, 500)
+      return () => clearTimeout(timer)
     }
-  }, [username])
+  }, [localUsername, username, onUsernameChange])
 
   // Close on outside click
   useEffect(() => {
@@ -70,8 +71,8 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom }) {
             <input
               className="settings-input"
               type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={localUsername}
+              onChange={(e) => setLocalUsername(e.target.value)}
               placeholder="Username"
               maxLength={24}
             />

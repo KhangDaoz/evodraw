@@ -12,14 +12,14 @@ import {
  * real-time operation sync (object:added / modified / removed)
  * and initial state sync for late joiners.
  */
-export default function useCanvasSync(canvas, roomId) {
+export default function useCanvasSync(canvas, roomId, isConnected) {
   const syncState = useRef({ _applying: false })
 
   useEffect(() => {
-    if (!canvas || !roomId) return
+    if (!canvas || !roomId || !isConnected) return
 
     const socket = getSocket()
-    if (!socket) return
+    if (!socket || !socket.connected) return
 
     // ── Outbound: local changes → server ──
     const detach = attachSerializer(canvas, (op) => {
@@ -58,5 +58,5 @@ export default function useCanvasSync(canvas, roomId) {
       socket.off('canvas_state_request', onStateRequest)
       socket.off('canvas_state_init', onStateInit)
     }
-  }, [canvas, roomId])
+  }, [canvas, roomId, isConnected])
 }

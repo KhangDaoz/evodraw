@@ -3,13 +3,13 @@ import * as fabric from 'fabric'
 import useCanvasSync from '../../hooks/useCanvasSync'
 import './Canvas.css'
 
-export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWidth, roomId }) {
+export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWidth, roomId, isConnected }) {
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
   const [fabricCanvas, setFabricCanvas] = useState(null)
 
   // Real-time sync: serialize canvas ops ↔ socket
-  useCanvasSync(fabricCanvas, roomId)
+  useCanvasSync(fabricCanvas, roomId, isConnected)
 
   useEffect(() => {
     if (!canvasRef.current || !containerRef.current) return
@@ -24,6 +24,8 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
       perPixelTargetFind: true,
       // Hit tolerance in px — user doesn't need pixel-perfect aim on thin strokes
       targetFindTolerance: 5,
+      fireRightClick: true,
+      stopContextMenu: true,
     })
 
     setFabricCanvas(canvas)
@@ -73,8 +75,8 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
     let lastPosY = 0
 
     canvas.on('mouse:down', (opt) => {
-      // Middle Click (button 1) or holding Space down (not easily captured here, but we can do middle click)
-      if (opt.e.button === 1 || opt.e.altKey) {
+      // Middle Click (button 1), Right Click (button 2), or holding Alt
+      if (opt.e.button === 1 || opt.e.button === 2 || opt.e.altKey) {
         isDragging = true
         canvas.selection = false
         lastPosX = opt.e.clientX
@@ -221,7 +223,7 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
     // ─── MOUSE DOWN ───
     const onMouseDown = (o) => {
       if (fabricCanvas.isDrawingMode) return
-      if (o.e.button === 1 || o.e.altKey) return
+      if (o.e.button === 1 || o.e.button === 2 || o.e.altKey) return
       if (canSelect) return
 
       drawing = true
@@ -403,7 +405,7 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
   }, [fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth])
 
   return (
-    <div className="evodraw-canvas-area" ref={containerRef}>
+    <div className="evodraw-canvas-area" ref={containerRef} onContextMenu={(e) => e.preventDefault()}>
       <div className="canvas-dot-grid" />
       <canvas ref={canvasRef} className="draw-surface" />
     </div>

@@ -1,11 +1,15 @@
 import { useRef, useEffect, useState } from 'react'
 import * as fabric from 'fabric'
+import useCanvasSync from '../../hooks/useCanvasSync'
 import './Canvas.css'
 
-export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWidth }) {
+export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWidth, roomId }) {
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
   const [fabricCanvas, setFabricCanvas] = useState(null)
+
+  // Real-time sync: serialize canvas ops ↔ socket
+  useCanvasSync(fabricCanvas, roomId)
 
   useEffect(() => {
     if (!canvasRef.current || !containerRef.current) return
@@ -244,21 +248,25 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
         case 'rectangle':
         case 'frame':
           shape = new fabric.Rect({ left: originX, top: originY, width: 0, height: 0, ...base })
+          shape._evoDrawing = true
           fabricCanvas.add(shape)
           break
 
         case 'circle':
           shape = new fabric.Ellipse({ left: originX, top: originY, rx: 0, ry: 0, ...base })
+          shape._evoDrawing = true
           fabricCanvas.add(shape)
           break
 
         case 'line':
           shape = new fabric.Line([originX, originY, originX, originY], base)
+          shape._evoDrawing = true
           fabricCanvas.add(shape)
           break
 
         case 'arrow': {
           const line = new fabric.Line([originX, originY, originX, originY], base)
+          line._evoDrawing = true
           const headSize = 10 + lineWidth * 1.5
           const head = new fabric.Triangle({
             width: headSize, height: headSize,
@@ -267,6 +275,7 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
             originX: 'center', originY: 'center',
             selectable: false, evented: false,
           })
+          head._evoDrawing = true
           shape = { _arrow: true, line, head }
           fabricCanvas.add(line, head)
           break
@@ -368,6 +377,10 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
         }
 
         fabricCanvas.requestRenderAll()
+      } else if (shape) {
+        // Finalize non-arrow shape: clear drawing flag, emit final state
+        delete shape._evoDrawing
+        fabricCanvas.fire('object:added', { target: shape })
       }
 
       shape = null

@@ -16,4 +16,21 @@ export const registerDrawHandlers = (io, socket) => {
         markRoomActivity(payload?.roomId);
     });
 
+    // Canvas operation relay (object:added, object:modified, object:removed)
+    // Expected payload: { roomId: string, op: { type, id?, object? } }
+    socket.on('canvas_op', (payload) => {
+        socket.to(payload.roomId).emit('canvas_op_received', { op: payload.op });
+        markRoomActivity(payload?.roomId);
+    });
+
+    // Initial state sync: new joiner asks existing peers for canvas snapshot
+    socket.on('canvas_state_request', ({ roomId }) => {
+        socket.to(roomId).emit('canvas_state_request', { requesterId: socket.id });
+    });
+
+    // Existing peer responds with full canvas snapshot → forward to requester
+    socket.on('canvas_state_response', ({ requesterId, snapshot }) => {
+        io.to(requesterId).emit('canvas_state_init', { snapshot });
+    });
+
 };

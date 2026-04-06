@@ -51,11 +51,12 @@ export default function RoomPage() {
 
   return (
     <div className="room-page">
-      <Canvas 
+      <Canvas
         activeTool={activeTool}
         onToolSelect={setActiveTool}
-        strokeColor={strokeColor} 
-        strokeWidth={strokeWidth} 
+        strokeColor={strokeColor}
+        strokeWidth={strokeWidth}
+        roomId={roomCode}
       />
 
       <Toolbar

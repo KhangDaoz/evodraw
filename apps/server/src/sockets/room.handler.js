@@ -38,7 +38,7 @@ export const registerRoomHandlers = (io, socket) => {
         console.log(`User ${username} joined room ${roomId}`);
         markRoomActivity(roomId, { force: true });
 
-        socket.to(roomId).emit('user_joined', { username, roomId });
+        socket.to(roomId).emit('user_joined', { username, roomId, socketId: socket.id });
         broadcastRoomUsers(io, roomId);
     });
 
@@ -50,7 +50,7 @@ export const registerRoomHandlers = (io, socket) => {
         console.log(`User ${username} left room ${roomId}`);
         markRoomActivity(roomId, { force: true });
 
-        socket.to(roomId).emit('user_left', { username, roomId });
+        socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
         broadcastRoomUsers(io, roomId);
     });
 
@@ -58,7 +58,7 @@ export const registerRoomHandlers = (io, socket) => {
         const { roomId, username } = socket.data;
         if (roomId) {
             roomMembers.get(roomId)?.delete(socket.id);
-            socket.to(roomId).emit('user_left', { username, roomId });
+            socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
             broadcastRoomUsers(io, roomId);
         }
     });

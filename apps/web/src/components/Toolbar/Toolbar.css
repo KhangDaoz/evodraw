@@ -198,3 +198,12 @@
   from { opacity: 0; transform: translateX(-4px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+.tool-btn.voice-active {
+  color: #ef4444; /* Red color to indicate mic isn't muted/recording */
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.tool-btn.voice-active:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+}

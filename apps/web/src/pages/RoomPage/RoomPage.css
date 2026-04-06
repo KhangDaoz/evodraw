@@ -94,3 +94,40 @@
     transform: translateX(-50%) translateY(0);
   }
 }
+
+/* --- Added for Chat Toggle --- */
+
+.chat-toggle-btn {
+  position: absolute;
+  bottom: 20px;
+  right: 70px;
+  width: 48px;
+  height: 48px;
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  z-index: 99;
+  color: #4a4a4a;
+}
+
+.chat-toggle-btn:hover {
+  background-color: #f5f5f5;
+  transform: translateY(-2px);
+}
+
+.chat-toggle-btn.active {
+  background-color: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+
+.chat-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+}

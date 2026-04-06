@@ -1,12 +1,14 @@
-import { useState } from 'react'
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import useRoom from '../../hooks/useRoom'
+import useChat from '../../hooks/useChat'
+import useVoiceChat from '../../hooks/useVoiceChat'
 import Toolbar from '../../components/Toolbar/Toolbar'
 import BottomBar from '../../components/BottomBar/BottomBar'
 import Canvas from '../../components/Canvas/Canvas'
 import SettingsPanel from '../../components/SettingsPanel/SettingsPanel'
 import MembersPanel from '../../components/MembersPanel/MembersPanel'
+import ChatPanel from '../../components/ChatPanel/ChatPanel'
 import { generateAnonymousName } from '../../utils/nameGenerator'
 import './RoomPage.css'
 
@@ -19,6 +21,7 @@ export default function RoomPage() {
   const [activeTool, setActiveTool] = useState('pen')
   const [strokeColor, setStrokeColor] = useState('#000000')
   const [strokeWidth, setStrokeWidth] = useState(5)
+  const [isChatOpen, setIsChatOpen] = useState(false)
 
   // Clear passcode from history securely, bypassing StrictMode double-mount issues
   useEffect(() => {
@@ -31,6 +34,12 @@ export default function RoomPage() {
   }, [navigate, location.state])
 
   const { isConnected, connectedUsers, error } = useRoom(roomCode, username, passcode)
+  
+  // Real-time Chat
+  const { messages, sendMessage } = useChat(roomCode, username)
+  
+  // Real-time Voice Chat (WebRTC)
+  const { isVoiceActive, toggleVoice, streams } = useVoiceChat(roomCode, username)
 
   if (!passcode) {
     return <Navigate to="/" state={{ roomCode, error: 'Please enter the room passcode' }} replace />
@@ -67,6 +76,8 @@ export default function RoomPage() {
         strokeWidth={strokeWidth}
         onWidthChange={setStrokeWidth}
         showHint={false}
+        isVoiceActive={isVoiceActive}
+        onToggleVoice={toggleVoice}
       />
 
       {/* Status bar */}
@@ -95,6 +106,41 @@ export default function RoomPage() {
           <span>{error}</span>
         </div>
       )}
+
+      {/* Chat UI Panel */}
+      {isChatOpen && (
+        <ChatPanel 
+          messages={messages} 
+          onSendMessage={sendMessage} 
+          username={username} 
+        />
+      )}
+
+      {/* Main chat toggle button bottom right */}
+      <button 
+        className={`chat-toggle-btn ${isChatOpen ? 'active' : ''}`}
+        onClick={() => setIsChatOpen(!isChatOpen)}
+        title="Toggle Chat"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </button>
+
+      {/* Hidden Audio Elements for WebRTC Voice Streams */}
+      <div style={{ display: 'none' }}>
+        {Object.entries(streams).map(([socketId, stream]) => (
+          <audio 
+            key={socketId}
+            autoPlay
+            ref={audio => {
+              if (audio && audio.srcObject !== stream) {
+                audio.srcObject = stream
+              }
+            }}
+          />
+        ))}
+      </div>
 
       <BottomBar />
     </div>

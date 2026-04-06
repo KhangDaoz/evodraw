@@ -121,20 +121,132 @@ export default function Toolbar({
     <div className="toolbar-area">
       {/* Tool buttons */}
       <nav className="toolbar" style={{ position: 'relative' }}>
-        {mainTools.map((tool) => (
+        {/* Select Tool */}
+        <button
+          className={`tool-btn ${activeTool === 'select' ? 'active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToolSelect('select')
+            setShowShapeOptions(false)
+            setShowOptions(false)
+          }}
+          title="Select"
+        >
+          {mainTools.find(t => t.id === 'select').icon}
+        </button>
+
+        {/* Pen Tool with popup */}
+        <div style={{ position: 'relative' }}>
           <button
-            key={tool.id}
-            className={`tool-btn ${activeTool === tool.id ? 'active' : ''}`}
+            className={`tool-btn ${activeTool === 'pen' ? 'active' : ''}`}
             onClick={(e) => {
               e.stopPropagation()
-              onToolSelect(tool.id)
-              setShowShapeOptions(false)
+              if (activeTool !== 'pen') {
+                onToolSelect('pen')
+                setShowShapeOptions(false)
+              } else {
+                setShowOptions(!showOptions)
+              }
             }}
-            title={tool.label}
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+              setShowOptions(!showOptions)
+            }}
+            title="Pen (Click again for options)"
           >
-            {tool.icon}
+            {mainTools.find(t => t.id === 'pen').icon}
+            {/* Tiny color indicator */}
+            <span style={{ 
+              position: 'absolute', 
+              bottom: 4, 
+              right: 4, 
+              width: 8, 
+              height: 8, 
+              borderRadius: '50%', 
+              backgroundColor: strokeColor || '#000000',
+              border: '1px solid rgba(0,0,0,0.1)' 
+            }}></span>
           </button>
-        ))}
+
+          {/* Color & Stroke Options Popup tied to Pen */}
+          {showOptions && (
+            <div className="tool-options animate-fade-in" style={{
+              position: 'absolute',
+              left: '100%',
+              top: 0,
+              marginLeft: '8px',
+              transform: 'none'
+            }}>
+              {/* Color presets */}
+              <div className="option-group">
+                <label>Color</label>
+                <div className="color-swatches">
+                  {PRESET_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      className={`color-swatch-btn ${strokeColor === c ? 'active' : ''}`}
+                      style={{ '--swatch': c }}
+                      onClick={() => {
+                        onColorChange(c)
+                        if (['select', 'eraser'].includes(activeTool)) onToolSelect('pen')
+                      }}
+                      title={c}
+                    />
+                  ))}
+                  {/* Custom color picker as last swatch */}
+                  <label className="color-custom-btn" title="Custom color">
+                    <input
+                      type="color"
+                      value={strokeColor}
+                      onChange={(e) => {
+                        onColorChange(e.target.value)
+                        if (['select', 'eraser'].includes(activeTool)) onToolSelect('pen')
+                      }}
+                      style={{ opacity: 0, position: 'absolute', width: 0, height: 0 }}
+                    />
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M8 2v12M2 8h12" strokeLinecap="round" />
+                    </svg>
+                  </label>
+                </div>
+              </div>
+
+              {/* Stroke size presets */}
+              <div className="option-group">
+                <label>Stroke</label>
+                <div className="stroke-presets">
+                  {PRESET_STROKES.map(({ label, value }) => (
+                    <button
+                      key={value}
+                      className={`stroke-preset-btn ${strokeWidth === value ? 'active' : ''}`}
+                      onClick={() => {
+                        onWidthChange(value)
+                        if (['select', 'eraser'].includes(activeTool)) onToolSelect('pen')
+                      }}
+                      title={`${value}px`}
+                    >
+                      <span className="stroke-dot" style={{ width: Math.min(value, 20), height: Math.min(value, 20) }} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Eraser Tool */}
+        <button
+          className={`tool-btn ${activeTool === 'eraser' ? 'active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToolSelect('eraser')
+            setShowShapeOptions(false)
+            setShowOptions(false)
+          }}
+          title="Eraser"
+        >
+          {mainTools.find(t => t.id === 'eraser').icon}
+        </button>
 
         {/* Shape Menu Toggle */}
         <div style={{ position: 'relative' }}>
@@ -146,6 +258,7 @@ export default function Toolbar({
                 onToolSelect(currentShapeId)
               }
               setShowShapeOptions(!showShapeOptions)
+              setShowOptions(false)
             }}
             onDoubleClick={(e) => {
               e.stopPropagation()
@@ -184,70 +297,7 @@ export default function Toolbar({
             </div>
           )}
         </div>
-        {/* Options Toggle currently showing the active stroke color */}
-        <button
-          className={`tool-btn ${showOptions ? 'active' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation()
-            setShowOptions(!showOptions)
-          }}
-          title="Color & Thickness"
-        >
-          <svg viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="6" fill={strokeColor || '#000000'} />
-          </svg>
-        </button>
       </nav>
-
-      {/* Tool Options Menu */}
-      {showOptions && (
-        <div className="tool-options animate-fade-in">
-          {/* Color presets */}
-          <div className="option-group">
-            <label>Color</label>
-            <div className="color-swatches">
-              {PRESET_COLORS.map((c) => (
-                <button
-                  key={c}
-                  className={`color-swatch-btn ${strokeColor === c ? 'active' : ''}`}
-                  style={{ '--swatch': c }}
-                  onClick={() => onColorChange(c)}
-                  title={c}
-                />
-              ))}
-              {/* Custom color picker as last swatch */}
-              <label className="color-custom-btn" title="Custom color">
-                <input
-                  type="color"
-                  value={strokeColor}
-                  onChange={(e) => onColorChange(e.target.value)}
-                  style={{ opacity: 0, position: 'absolute', width: 0, height: 0 }}
-                />
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M8 2v12M2 8h12" strokeLinecap="round" />
-                </svg>
-              </label>
-            </div>
-          </div>
-
-          {/* Stroke size presets */}
-          <div className="option-group">
-            <label>Stroke</label>
-            <div className="stroke-presets">
-              {PRESET_STROKES.map(({ label, value }) => (
-                <button
-                  key={value}
-                  className={`stroke-preset-btn ${strokeWidth === value ? 'active' : ''}`}
-                  onClick={() => onWidthChange(value)}
-                  title={`${value}px`}
-                >
-                  <span className="stroke-dot" style={{ width: Math.min(value, 20), height: Math.min(value, 20) }} />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Onboarding hint */}
       {showHint && (

@@ -14,6 +14,7 @@ export default function useVoiceChat(roomId, currentUsername) {
   
   const localStreamRef = useRef(null);
   const peersRef = useRef({}); // { socketId: RTCPeerConnection }
+  const iceCandidateQueues = useRef({}); // { socketId: RTCIceCandidateInit[] }
   
   const usernameRef = useRef(currentUsername);
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function useVoiceChat(roomId, currentUsername) {
       delete newStreams[socketId];
       return newStreams;
     });
+    delete iceCandidateQueues.current[socketId];
   }, []);
 
   // Cleanup all connections
@@ -41,6 +43,20 @@ export default function useVoiceChat(roomId, currentUsername) {
       localStreamRef.current = null;
     }
   }, [cleanupPeer]);
+
+  const processIceQueue = useCallback(async (socketId, pc) => {
+    const queue = iceCandidateQueues.current[socketId];
+    if (queue && queue.length > 0 && pc.remoteDescription) {
+      for (const candidate of queue) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          console.error("Error adding queued ice candidate", err);
+        }
+      }
+      iceCandidateQueues.current[socketId] = [];
+    }
+  }, []);
 
   const toggleVoice = useCallback(async () => {
     if (isVoiceActive) {
@@ -59,11 +75,14 @@ export default function useVoiceChat(roomId, currentUsername) {
           pc.createOffer()
             .then(offer => pc.setLocalDescription(offer).then(() => offer))
             .then(offer => {
-              getSocket().emit('webrtc:offer', {
-                targetSocketId: socketId,
-                offer,
-                senderName: usernameRef.current
-              });
+              const socket = getSocket();
+              if (socket) {
+                socket.emit('webrtc:offer', {
+                  targetSocketId: socketId,
+                  offer,
+                  senderName: usernameRef.current
+                });
+              }
             })
             .catch(err => console.error("Renegotiation failed", err));
         });
@@ -87,11 +106,14 @@ export default function useVoiceChat(roomId, currentUsername) {
           pc.createOffer()
             .then(offer => pc.setLocalDescription(offer).then(() => offer))
             .then(offer => {
-              getSocket().emit('webrtc:offer', {
-                targetSocketId: socketId,
-                offer,
-                senderName: usernameRef.current
-              });
+              const socket = getSocket();
+              if (socket) {
+                socket.emit('webrtc:offer', {
+                  targetSocketId: socketId,
+                  offer,
+                  senderName: usernameRef.current
+                });
+              }
             })
             .catch(err => console.error("Renegotiation failed", err));
         });
@@ -114,6 +136,9 @@ export default function useVoiceChat(roomId, currentUsername) {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peersRef.current[targetSocketId] = pc;
 
+    // Force an audio transceiver from the start so the connection negotiates properly
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+
     // Add local tracks if we already have them active
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
@@ -123,7 +148,7 @@ export default function useVoiceChat(roomId, currentUsername) {
 
     // Handle incoming ICE candidates
     pc.onicecandidate = (event) => {
-      if (event.candidate) {
+      if (event.candidate && socket) {
         socket.emit('webrtc:ice-candidate', {
           targetSocketId,
           candidate: event.candidate
@@ -180,6 +205,8 @@ export default function useVoiceChat(roomId, currentUsername) {
       const pc = createPeerConnection(fromSocketId);
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        processIceQueue(fromSocketId, pc); // Process any ICE candidates that arrived early
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit('webrtc:answer', {
@@ -197,6 +224,7 @@ export default function useVoiceChat(roomId, currentUsername) {
       if (pc) {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          processIceQueue(fromSocketId, pc); // Process any ICE candidates that arrived early
         } catch (err) {
           console.error("Error setting remote description from answer", err);
         }
@@ -205,13 +233,20 @@ export default function useVoiceChat(roomId, currentUsername) {
 
     // 4. Exchange ICE Candidates
     const handleReceiveIceCandidate = async ({ fromSocketId, candidate }) => {
+      if (!candidate) return;
       const pc = peersRef.current[fromSocketId];
-      if (pc && candidate) {
+
+      if (pc && pc.remoteDescription) {
         try {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
           console.error("Error adding ice candidate", err);
         }
+      } else {
+        if (!iceCandidateQueues.current[fromSocketId]) {
+          iceCandidateQueues.current[fromSocketId] = [];
+        }
+        iceCandidateQueues.current[fromSocketId].push(candidate);
       }
     };
 
@@ -230,7 +265,7 @@ export default function useVoiceChat(roomId, currentUsername) {
       cleanupAll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createPeerConnection, cleanupPeer, cleanupAll]);
+  }, [createPeerConnection, cleanupPeer, cleanupAll, processIceQueue]);
 
   return {
     isVoiceActive,

@@ -58,18 +58,18 @@ export async function joinRoom(req, res) {
     try {
         const { code, passcode } = req.body || {};
 
-        const room = await Room.verifyAccess(code.toUpperCase(), passcode);
+        const room = await Room.verifyAccess(code, passcode);
 
         if (!room) {
             return res.status(401).json({ success: false, message: 'Invalid room code or passcode.' });
         }
 
-        // Extend the room's life by updating `updatedAt`
-        await Room.touch(code.toUpperCase());
+        await Room.touch(code);
 
+        const { passcode: _hash, ...safeRoom } = room;
         res.status(200).json({
             success: true,
-            data: room
+            data: safeRoom,
         });
     } catch (error) {
         console.error('Join room error:', error);

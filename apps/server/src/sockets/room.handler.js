@@ -15,7 +15,16 @@ function broadcastRoomUsers(io, roomId) {
 }
 
 export const registerRoomHandlers = (io, socket) => {
-    socket.on('join_room', async ({ roomId, username, passcode }) => {
+    socket.on('join_room', async (payload) => {
+        const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : '';
+        const username = typeof payload?.username === 'string' ? payload.username.trim() : '';
+        const passcode = typeof payload?.passcode === 'string' ? payload.passcode.trim() : '';
+
+        if (!roomId || roomId.length !== 6 || !passcode || !/^\d{4}$/.test(passcode)) {
+            socket.emit('room_error', { message: 'Invalid room code or passcode format.' });
+            return;
+        }
+
         try {
             const room = await Room.verifyAccess(roomId, passcode);
             if (!room) {

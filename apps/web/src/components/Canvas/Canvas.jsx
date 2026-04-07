@@ -164,11 +164,16 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
 
     // --- Selection state ---
     const canSelect = activeTool === 'select' || activeTool === 'hand'
+    const isEraser = activeTool === 'eraser'
+
     fabricCanvas.selection = canSelect
-    fabricCanvas.skipTargetFind = !canSelect
+    fabricCanvas.skipTargetFind = !canSelect && !isEraser
 
     fabricCanvas.forEachObject(obj => {
-      obj.set({ selectable: canSelect, evented: canSelect })
+      obj.set({
+        selectable: canSelect,
+        evented: canSelect || isEraser,
+      })
       obj.setCoords()
     })
     fabricCanvas.requestRenderAll()
@@ -188,27 +193,11 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
       return fabricCanvas.getScenePoint(o.e)
     }
 
-    // Viewport-space pointer (for bounding-rect hit-testing)
-    const viewportPoint = (o) => fabricCanvas.getViewportPoint(o.e)
-
-    // Bounding-rect hit test with stroke tolerance
-    const hitTest = (obj, pt) => {
-      const b = obj.getBoundingRect()
-      const t = Math.max(10, (obj.strokeWidth || 0) * 2)
-      return pt.x >= b.left - t && pt.x <= b.left + b.width + t &&
-        pt.y >= b.top - t && pt.y <= b.top + b.height + t
-    }
-
-    // Erase topmost object at viewport point
+    // Erase topmost object under cursor (per-pixel stroke detection)
     const eraseAt = (o) => {
-      const pt = viewportPoint(o)
-      const objs = fabricCanvas.getObjects()
-      for (let i = objs.length - 1; i >= 0; i--) {
-        if (hitTest(objs[i], pt)) {
-          fabricCanvas.remove(objs[i])
-          fabricCanvas.requestRenderAll()
-          return
-        }
+      if (o.target) {
+        fabricCanvas.remove(o.target)
+        fabricCanvas.requestRenderAll()
       }
     }
 

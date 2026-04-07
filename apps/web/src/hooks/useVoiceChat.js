@@ -51,9 +51,21 @@ export default function useVoiceChat(roomId, currentUsername) {
         });
         
         // Remove track from all existing peer connections
-        Object.values(peersRef.current).forEach(pc => {
+        Object.entries(peersRef.current).forEach(([socketId, pc]) => {
           const senders = pc.getSenders();
           senders.forEach(sender => pc.removeTrack(sender));
+          
+          // Renegotiate to stop sending media
+          pc.createOffer()
+            .then(offer => pc.setLocalDescription(offer).then(() => offer))
+            .then(offer => {
+              getSocket().emit('webrtc:offer', {
+                targetSocketId: socketId,
+                offer,
+                senderName: usernameRef.current
+              });
+            })
+            .catch(err => console.error("Renegotiation failed", err));
         });
         
         localStreamRef.current = null;
@@ -66,10 +78,22 @@ export default function useVoiceChat(roomId, currentUsername) {
         localStreamRef.current = stream;
         
         // Add track to all existing peer connections
-        Object.values(peersRef.current).forEach(pc => {
+        Object.entries(peersRef.current).forEach(([socketId, pc]) => {
           stream.getTracks().forEach(track => {
             pc.addTrack(track, stream);
           });
+          
+          // Renegotiate to send new media
+          pc.createOffer()
+            .then(offer => pc.setLocalDescription(offer).then(() => offer))
+            .then(offer => {
+              getSocket().emit('webrtc:offer', {
+                targetSocketId: socketId,
+                offer,
+                senderName: usernameRef.current
+              });
+            })
+            .catch(err => console.error("Renegotiation failed", err));
         });
         
         setIsVoiceActive(true);

@@ -126,11 +126,12 @@
 }
 
 .theme-btn.active {
-  background: #f8d7da;
+  background: rgba(105, 101, 219, 0.15);
+  color: var(--accent);
 }
 
 .theme-btn:hover:not(.active) {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--border);
 }
 
 /* Select */

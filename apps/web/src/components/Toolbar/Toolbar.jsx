@@ -31,6 +31,17 @@ const mainTools = [
         <path d="M10 11l4 4" />
       </svg>
     ),
+  },
+  {
+    id: 'text',
+    label: 'Text',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="4 7 4 4 20 4 20 7" />
+        <line x1="9.5" y1="20" x2="14.5" y2="20" />
+        <line x1="12" y1="4" x2="12" y2="20" />
+      </svg>
+    ),
   }
 ]
 
@@ -248,6 +259,20 @@ export default function Toolbar({
           title="Eraser"
         >
           {mainTools.find(t => t.id === 'eraser').icon}
+        </button>
+
+        {/* Text Tool */}
+        <button
+          className={`tool-btn ${activeTool === 'text' ? 'active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToolSelect('text')
+            setShowShapeOptions(false)
+            setShowOptions(false)
+          }}
+          title="Text"
+        >
+          {mainTools.find(t => t.id === 'text').icon}
         </button>
 
         {/* Shape Menu Toggle */}

@@ -1,5 +1,8 @@
 import { markRoomActivity } from './room.activity.js';
 
+// In-memory store for room background colors
+const roomBgColors = new Map();
+
 export const registerDrawHandlers = (io, socket) => {
     // High-frequency event: Drawing a stroke
     // Expected payload: { roomId: string, stroke: object }
@@ -23,6 +26,16 @@ export const registerDrawHandlers = (io, socket) => {
         markRoomActivity(payload?.roomId);
     });
 
+    // Canvas background color sync
+    // Expected payload: { roomId: string, bgColor: string, bgId?: string }
+    socket.on('canvas_bg_change', (payload) => {
+        if (!payload?.roomId || !payload?.bgColor) return;
+        const bgState = { bgColor: payload.bgColor, bgId: payload.bgId || 'default' };
+        roomBgColors.set(payload.roomId, bgState);
+        socket.to(payload.roomId).emit('canvas_bg_changed', bgState);
+        markRoomActivity(payload?.roomId);
+    });
+
     // Initial state sync: new joiner asks existing peers for canvas snapshot
     socket.on('canvas_state_request', ({ roomId }) => {
         socket.to(roomId).emit('canvas_state_request', { requesterId: socket.id });
@@ -34,3 +47,4 @@ export const registerDrawHandlers = (io, socket) => {
     });
 
 };
+

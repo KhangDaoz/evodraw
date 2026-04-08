@@ -8,7 +8,33 @@
   --text-muted: #a0a0a8;
   --border: #e0e0e0;
   --surface: #ffffff;
-  --bg: #f8f9fa;
+  --bg: #ffffff;
+}
+
+/* Dark theme overrides */
+[data-theme="dark"] {
+  --accent: #7c78f0;
+  --accent-hover: #6965db;
+  --text: #e4e4e8;
+  --text-light: #a0a0ab;
+  --text-muted: #6e6e7a;
+  --border: #35353d;
+  --surface: #1e1e24;
+  --bg: #121212;
+}
+
+/* System preference fallback */
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --accent: #7c78f0;
+    --accent-hover: #6965db;
+    --text: #e4e4e8;
+    --text-light: #a0a0ab;
+    --text-muted: #6e6e7a;
+    --border: #35353d;
+    --surface: #1e1e24;
+    --bg: #121212;
+  }
 }
 
 * {

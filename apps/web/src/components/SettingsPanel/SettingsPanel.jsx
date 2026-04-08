@@ -7,22 +7,67 @@ const THEME_OPTIONS = [
   { id: 'system', icon: '🖥️', label: 'System' },
 ]
 
-const BG_COLORS = [
-  { id: 'default', value: '#f8f9fa' },
-  { id: 'warm', value: '#f5f0e8' },
-  { id: 'dark', value: '#1e1e2e' },
-  { id: 'sage', value: '#e8ede4' },
-  { id: 'rose', value: '#fce4ec' },
-  { id: 'mint', value: '#e0f2f1' },
+// Each swatch has a light and dark variant — like Excalidraw
+export const BG_PRESETS = [
+  { id: 'default', light: '#ffffff', dark: '#121212' },
+  { id: 'warm', light: '#f5f0e8', dark: '#1a1714' },
+  { id: 'blue', light: '#f0f4ff', dark: '#121620' },
+  { id: 'sage', light: '#e8ede4', dark: '#141a12' },
+  { id: 'rose', light: '#fce4ec', dark: '#1c1215' },
+  { id: 'mint', light: '#e0f2f1', dark: '#0f1a19' },
 ]
 
-export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, username, onUsernameChange }) {
+export function resolveTheme(themeId) {
+  if (themeId === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return themeId
+}
+
+function applyTheme(themeId) {
+  document.documentElement.setAttribute('data-theme', themeId)
+  localStorage.setItem('evodraw_theme', themeId)
+}
+
+export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, username, onUsernameChange, canvasBgId, onBgChange }) {
   const [isOpen, setIsOpen] = useState(false)
   const [localUsername, setLocalUsername] = useState(username || 'Username')
-  const [theme, setTheme] = useState('light')
-  const [selectedBg, setSelectedBg] = useState('default')
+  const [theme, setTheme] = useState(() => localStorage.getItem('evodraw_theme') || 'light')
   const [showPin, setShowPin] = useState(false)
   const panelRef = useRef(null)
+
+  const effectiveTheme = resolveTheme(theme)
+  const activeBgId = canvasBgId || 'default'
+
+  // Apply theme on mount and when changed
+  useEffect(() => {
+    applyTheme(theme)
+  }, [theme])
+
+  // When theme changes, push new bg color for the *same* swatch
+  const handleThemeChange = (newTheme) => {
+    setTheme(newTheme)
+    if (onBgChange) {
+      const resolved = resolveTheme(newTheme)
+      const preset = BG_PRESETS.find(p => p.id === activeBgId) || BG_PRESETS[0]
+      onBgChange(activeBgId, preset[resolved])
+    }
+  }
+
+  // Listen for system theme changes when theme is 'system'
+  useEffect(() => {
+    if (theme !== 'system') return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => {
+      if (onBgChange) {
+        const resolved = mq.matches ? 'dark' : 'light'
+        const preset = BG_PRESETS.find(p => p.id === activeBgId) || BG_PRESETS[0]
+        onBgChange(activeBgId, preset[resolved])
+      }
+    }
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [theme, activeBgId, onBgChange])
 
   // Persist username externally with debounce
   useEffect(() => {
@@ -46,6 +91,12 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
     }
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
+
+  const handleBgSelect = (preset) => {
+    if (onBgChange) {
+      onBgChange(preset.id, preset[effectiveTheme])
+    }
+  }
 
   return (
     <div className="settings-wrapper" ref={panelRef}>
@@ -87,7 +138,7 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
                   <button
                     key={opt.id}
                     className={`theme-btn ${theme === opt.id ? 'active' : ''}`}
-                    onClick={() => setTheme(opt.id)}
+                    onClick={() => handleThemeChange(opt.id)}
                     title={opt.label}
                   >
                     {opt.icon}
@@ -105,17 +156,17 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
             </select>
           </div>
 
-          {/* Canvas Background */}
+          {/* Canvas Background — swatches adapt to current theme */}
           <div className="settings-section">
             <label className="settings-label">Canvas Background</label>
             <div className="bg-swatches">
-              {BG_COLORS.map((bg) => (
+              {BG_PRESETS.map((preset) => (
                 <button
-                  key={bg.id}
-                  className={`bg-swatch ${selectedBg === bg.id ? 'active' : ''}`}
-                  style={{ background: bg.value }}
-                  onClick={() => setSelectedBg(bg.id)}
-                  title={bg.id}
+                  key={preset.id}
+                  className={`bg-swatch ${activeBgId === preset.id ? 'active' : ''}`}
+                  style={{ background: preset[effectiveTheme] }}
+                  onClick={() => handleBgSelect(preset)}
+                  title={preset.id}
                 />
               ))}
             </div>

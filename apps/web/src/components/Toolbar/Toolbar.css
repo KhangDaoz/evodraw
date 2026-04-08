@@ -40,7 +40,7 @@
 }
 
 .tool-btn:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--border);
   color: var(--text);
 }
 
@@ -174,7 +174,7 @@
 }
 
 .stroke-preset-btn:hover {
-  background: rgba(0,0,0,0.04);
+  background: var(--border);
   border-color: var(--text-muted);
 }
 

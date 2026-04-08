@@ -1,15 +1,81 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import * as fabric from 'fabric'
 import useCanvasSync from '../../hooks/useCanvasSync'
+import { getSocket } from '../../services/socket'
 import './Canvas.css'
 
-export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWidth, roomId, isConnected }) {
+const CURSOR_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+  '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16',
+]
+
+function getCursorColor(name) {
+  let hash = 0
+  for (const c of name) hash = c.charCodeAt(0) + ((hash << 5) - hash)
+  return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length]
+}
+
+const CURSOR_STALE_MS = 3000
+const CURSOR_THROTTLE_MS = 50
+
+export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWidth, roomId, username, isConnected, canvasBgColor, onBgColorChange }) {
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
   const [fabricCanvas, setFabricCanvas] = useState(null)
+  const [remoteCursors, setRemoteCursors] = useState({})
+  const [viewportVersion, setViewportVersion] = useState(0)
+  const lastEmitRef = useRef(0)
+  const staleTimersRef = useRef({})
 
   // Real-time sync: serialize canvas ops ↔ socket
-  useCanvasSync(fabricCanvas, roomId, isConnected)
+  useCanvasSync(fabricCanvas, roomId, isConnected, canvasBgColor, onBgColorChange)
+
+  // ── Remote cursor listener ──
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket || !roomId || !isConnected) return
+
+    const handleCursorMoved = ({ position, username: remoteUser }) => {
+      if (!remoteUser || remoteUser === username) return
+
+      setRemoteCursors(prev => ({
+        ...prev,
+        [remoteUser]: { x: position.x, y: position.y },
+      }))
+
+      // Reset stale timer for this user
+      if (staleTimersRef.current[remoteUser]) {
+        clearTimeout(staleTimersRef.current[remoteUser])
+      }
+      staleTimersRef.current[remoteUser] = setTimeout(() => {
+        setRemoteCursors(prev => {
+          const next = { ...prev }
+          delete next[remoteUser]
+          return next
+        })
+        delete staleTimersRef.current[remoteUser]
+      }, CURSOR_STALE_MS)
+    }
+
+    socket.on('cursor_moved', handleCursorMoved)
+
+    return () => {
+      socket.off('cursor_moved', handleCursorMoved)
+      Object.values(staleTimersRef.current).forEach(clearTimeout)
+      staleTimersRef.current = {}
+    }
+  }, [roomId, isConnected, username])
+
+  // Convert scene-space position to screen-space pixel position
+  // eslint-disable-next-line no-unused-vars
+  const sceneToScreen = useCallback((sceneX, sceneY, _version) => {
+    if (!fabricCanvas) return { x: 0, y: 0 }
+    const vpt = fabricCanvas.viewportTransform
+    return {
+      x: sceneX * vpt[0] + vpt[4],
+      y: sceneY * vpt[3] + vpt[5],
+    }
+  }, [fabricCanvas])
 
   useEffect(() => {
     if (!canvasRef.current || !containerRef.current) return
@@ -52,6 +118,7 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
       containerRef.current.style.setProperty('--pan-x', `${vpt[4]}px`)
       containerRef.current.style.setProperty('--pan-y', `${vpt[5]}px`)
       window.dispatchEvent(new CustomEvent('evodraw:zoom', { detail: zoom }))
+      setViewportVersion(v => v + 1)
     }
 
     // Handle Infinite Canvas: Zooming
@@ -95,6 +162,19 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
         lastPosY = opt.e.clientY
         syncGrid()
       }
+    })
+
+    // ── Emit own cursor position (throttled) ──
+    canvas.on('mouse:move', (opt) => {
+      const now = Date.now()
+      if (now - lastEmitRef.current < CURSOR_THROTTLE_MS) return
+      lastEmitRef.current = now
+
+      const socket = getSocket()
+      if (!socket || !roomId) return
+
+      const pt = canvas.getScenePoint(opt.e)
+      socket.emit('cursor_move', { roomId, position: { x: pt.x, y: pt.y }, username })
     })
 
     canvas.on('mouse:up', () => {
@@ -158,6 +238,7 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
       // eslint-disable-next-line react-hooks/immutability
       fabricCanvas.freeDrawingBrush.color = strokeColor || '#000000'
       fabricCanvas.freeDrawingBrush.width = strokeWidth || 5
+      fabricCanvas.freeDrawingBrush.decimate = 0.5 // Lower decimation for higher fidelity drawing
     } else {
       fabricCanvas.isDrawingMode = false
     }
@@ -165,9 +246,10 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
     // --- Selection state ---
     const canSelect = activeTool === 'select' || activeTool === 'hand'
     const isEraser = activeTool === 'eraser'
+    const isText = activeTool === 'text'
 
     fabricCanvas.selection = canSelect
-    fabricCanvas.skipTargetFind = !canSelect && !isEraser
+    fabricCanvas.skipTargetFind = !canSelect && !isEraser && !isText
 
     fabricCanvas.forEachObject(obj => {
       obj.set({
@@ -214,6 +296,32 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
       if (fabricCanvas.isDrawingMode) return
       if (o.e.button === 1 || o.e.button === 2 || o.e.altKey) return
       if (canSelect) return
+
+      // --- Text tool: create editable textbox on click ---
+      if (isText) {
+        // If clicking on an existing IText, let the default handler manage editing
+        if (o.target && o.target.type === 'i-text') return
+
+        const pt = scenePoint(o)
+        const textbox = new fabric.IText('Type here', {
+          left: pt.x,
+          top: pt.y,
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fontSize: Math.max(16, lineWidth * 3),
+          fill: color,
+          selectable: true,
+          evented: true,
+          editable: true,
+          cursorColor: color,
+          cursorWidth: 2,
+        })
+        fabricCanvas.add(textbox)
+        fabricCanvas.setActiveObject(textbox)
+        textbox.enterEditing()
+        textbox.selectAll()
+        if (onToolSelect) onToolSelect('select')
+        return
+      }
 
       drawing = true
 
@@ -395,8 +503,39 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
 
   return (
     <div className="evodraw-canvas-area" ref={containerRef} onContextMenu={(e) => e.preventDefault()}>
-      <div className="canvas-dot-grid" />
+      <div
+        className="canvas-dot-grid"
+        style={canvasBgColor ? { backgroundColor: canvasBgColor } : undefined}
+      />
       <canvas ref={canvasRef} className="draw-surface" />
+
+      {/* Remote cursor overlays */}
+      {Object.entries(remoteCursors).map(([user, pos]) => {
+        const screen = sceneToScreen(pos.x, pos.y, viewportVersion)
+        const color = getCursorColor(user)
+        return (
+          <div
+            key={user}
+            className="remote-cursor"
+            style={{
+              left: screen.x,
+              top: screen.y,
+              '--cursor-color': color,
+            }}
+          >
+            <svg
+              className="remote-cursor-arrow"
+              width="16" height="20" viewBox="0 0 16 20"
+              fill={color} stroke="#fff" strokeWidth="1.2"
+            >
+              <path d="M0 0 L16 12 L8 12 L6 20 Z" />
+            </svg>
+            <span className="remote-cursor-label" style={{ background: color }}>
+              {user}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }

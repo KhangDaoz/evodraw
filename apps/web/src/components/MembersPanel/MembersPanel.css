@@ -139,7 +139,7 @@
 }
 
 .member-row:hover {
-  background: rgba(0,0,0,0.04);
+  background: var(--border);
 }
 
 /* Avatar */

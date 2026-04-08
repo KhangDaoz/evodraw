@@ -12,8 +12,14 @@ import {
  * real-time operation sync (object:added / modified / removed)
  * and initial state sync for late joiners.
  */
-export default function useCanvasSync(canvas, roomId, isConnected) {
+export default function useCanvasSync(canvas, roomId, isConnected, canvasBgColor, canvasBgId, onBgColorReceived) {
   const syncState = useRef({ _applying: false })
+  const bgStateRef = useRef({ canvasBgColor, canvasBgId })
+
+  // Keep refs updated so closures see the latest value without re-binding everything
+  useEffect(() => {
+    bgStateRef.current = { canvasBgColor, canvasBgId }
+  }, [canvasBgColor, canvasBgId])
 
   useEffect(() => {
     if (!canvas || !roomId || !isConnected) return
@@ -35,6 +41,9 @@ export default function useCanvasSync(canvas, roomId, isConnected) {
     // Respond to new joiners requesting current canvas state
     const onStateRequest = ({ requesterId }) => {
       const snapshot = serializeCanvas(canvas)
+      // Include background color and id in the snapshot pulling from ref
+      snapshot.bgColor = bgStateRef.current.canvasBgColor || null
+      snapshot.bgId = bgStateRef.current.canvasBgId || 'default'
       socket.emit('canvas_state_response', { requesterId, snapshot })
     }
 
@@ -42,6 +51,12 @@ export default function useCanvasSync(canvas, roomId, isConnected) {
     const onStateInit = async ({ snapshot }) => {
       if (snapshot?.objects?.length > 0) {
         await loadCanvasSnapshot(canvas, snapshot, syncState.current)
+      }
+      // Also apply the bg color from the snapshot
+      if (snapshot?.bgId && snapshot?.bgColor && onBgColorReceived) {
+        onBgColorReceived(snapshot.bgId, snapshot.bgColor)
+      } else if (snapshot?.bgColor && onBgColorReceived) {
+        onBgColorReceived('default', snapshot.bgColor) // fallback
       }
     }
 

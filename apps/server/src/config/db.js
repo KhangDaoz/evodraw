@@ -19,16 +19,3 @@ async function connectDB() {
 }
 
 export default connectDB;
-
-// export async function initializeIndexes() {
-//   try {
-//     // Keep room documents alive for 24h since last activity.
-//     await mongoose.connection.collection('rooms').createIndex(
-//       { updatedAt: 1 },
-//       { expireAfterSeconds: 86400 }
-//     );
-//     console.log('TTL Index verified on rooms.updatedAt');
-//   } catch (error) {
-//     console.error('Error creating indexes:', error.message);
-//   }
-// }

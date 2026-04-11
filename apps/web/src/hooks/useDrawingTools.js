@@ -1,15 +1,30 @@
 import { useEffect } from 'react'
 import * as fabric from 'fabric'
 
+const hexToRgba = (hex, opacity) => {
+  if (!hex) return `rgba(0, 0, 0, ${opacity})`
+  let c = hex.replace('#', '')
+  if (c.length === 3) c = c.split('').map(x => x + x).join('')
+  const r = parseInt(c.slice(0, 2), 16) || 0
+  const g = parseInt(c.slice(2, 4), 16) || 0
+  const b = parseInt(c.slice(4, 6), 16) || 0
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`
+}
+
 /**
  * Handles all drawing tool interactions on the Fabric canvas:
  * pen, eraser, shapes (rect, circle, line, arrow), and text.
  *
  * Auto-switches to "select" mode after completing a shape.
  */
-export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth) {
+export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity = 1, strokeStyle = 'solid') {
   useEffect(() => {
     if (!fabricCanvas) return
+
+    const colorWithOpacity = hexToRgba(strokeColor || '#000000', strokeOpacity)
+    let currentDashArray = null
+    if (strokeStyle === 'dashed') currentDashArray = [strokeWidth * 2, strokeWidth * 2]
+    if (strokeStyle === 'dotted') currentDashArray = [strokeWidth, strokeWidth * 1.5]
 
     // --- Pen tool setup ---
     if (activeTool === 'pen') {
@@ -17,8 +32,11 @@ export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, 
       if (!fabricCanvas.freeDrawingBrush) {
         fabricCanvas.freeDrawingBrush = new fabric.PencilBrush(fabricCanvas)
       }
-      fabricCanvas.freeDrawingBrush.color = strokeColor || '#000000'
+      fabricCanvas.freeDrawingBrush.color = colorWithOpacity
       fabricCanvas.freeDrawingBrush.width = strokeWidth || 5
+      fabricCanvas.freeDrawingBrush.strokeDashArray = currentDashArray
+      fabricCanvas.freeDrawingBrush.strokeLineCap = 'round'
+      fabricCanvas.freeDrawingBrush.strokeLineJoin = 'round'
       fabricCanvas.freeDrawingBrush.decimate = 0.5 // Lower decimation for higher fidelity drawing
     } else {
       fabricCanvas.isDrawingMode = false
@@ -47,7 +65,7 @@ export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, 
     let originX = 0
     let originY = 0
 
-    const color = strokeColor || '#000000'
+    const color = colorWithOpacity
     const lineWidth = strokeWidth || 5
 
     // Scene-space pointer (respects zoom/pan)
@@ -116,6 +134,8 @@ export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, 
         stroke: color,
         strokeWidth: lineWidth,
         fill: 'transparent',
+        strokeDashArray: currentDashArray,
+        strokeLineCap: strokeStyle === 'dotted' ? 'round' : 'butt',
         originX: 'left',
         originY: 'top',
         selectable: false,
@@ -238,7 +258,10 @@ export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, 
 
         if (len > 2) {
           const shaft = new fabric.Line([0, 0, len, 0], {
-            stroke: color, strokeWidth: lineWidth, strokeLineCap: 'round',
+            stroke: color, 
+            strokeWidth: lineWidth, 
+            strokeLineCap: strokeStyle === 'dotted' ? 'round' : 'butt',
+            strokeDashArray: currentDashArray
           })
           const headLen = 15 + lineWidth
           const tip = new fabric.Polygon([
@@ -280,5 +303,5 @@ export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, 
       fabricCanvas.off('mouse:move', onMouseMove)
       fabricCanvas.off('mouse:up', onMouseUp)
     }
-  }, [fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth])
+  }, [fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle])
 }

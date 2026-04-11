@@ -112,6 +112,12 @@ export default function Toolbar({
   onColorChange,
   strokeWidth,
   onWidthChange,
+  strokeOpacity = 1,
+  onOpacityChange,
+  strokeStyle = 'solid',
+  onStyleChange,
+  onUndo,
+  onRedo,
   showHint,
   isVoiceActive,
   onToggleVoice
@@ -226,7 +232,7 @@ export default function Toolbar({
 
               {/* Stroke size presets */}
               <div className="option-group">
-                <label>Stroke</label>
+                <label>Stroke Size</label>
                 <div className="stroke-presets">
                   {PRESET_STROKES.map(({ label, value }) => (
                     <button
@@ -243,6 +249,44 @@ export default function Toolbar({
                   ))}
                 </div>
               </div>
+
+              {/* Opacity slider */}
+              {onOpacityChange && (
+                <div className="option-group">
+                  <label>Opacity: {Math.round(strokeOpacity * 100)}%</label>
+                  <div className="opacity-slider-container">
+                    <input 
+                      type="range" 
+                      min="0.1" 
+                      max="1" 
+                      step="0.1" 
+                      value={strokeOpacity}
+                      onChange={(e) => onOpacityChange(parseFloat(e.target.value))}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Stroke style (solid, dashed, dotted) */}
+              {onStyleChange && (
+                <div className="option-group">
+                  <label>Stroke Style</label>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button 
+                      className={`stroke-style-btn ${strokeStyle === 'solid' ? 'active' : ''}`}
+                      onClick={() => onStyleChange('solid')}
+                    >Solid</button>
+                    <button 
+                      className={`stroke-style-btn ${strokeStyle === 'dashed' ? 'active' : ''}`}
+                      onClick={() => onStyleChange('dashed')}
+                    >Dashed</button>
+                    <button 
+                      className={`stroke-style-btn ${strokeStyle === 'dotted' ? 'active' : ''}`}
+                      onClick={() => onStyleChange('dotted')}
+                    >Dotted</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -324,6 +368,35 @@ export default function Toolbar({
             </div>
           )}
         </div>
+        {/* Divider */}
+        <div style={{ width: '20px', height: '1px', backgroundColor: '#e0e0e0', margin: '4px 0' }} />
+
+        {/* Undo/Redo */}
+        {onUndo && (
+          <button
+            className="tool-btn"
+            onClick={(e) => { e.stopPropagation(); onUndo(); }}
+            title="Undo (Ctrl+Z)"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7v6h6" />
+              <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13" />
+            </svg>
+          </button>
+        )}
+        {onRedo && (
+          <button
+            className="tool-btn"
+            onClick={(e) => { e.stopPropagation(); onRedo(); }}
+            title="Redo (Ctrl+Y)"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 7v6h-6" />
+              <path d="M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7" />
+            </svg>
+          </button>
+        )}
+
         {/* Divider */}
         <div style={{ width: '20px', height: '1px', backgroundColor: '#e0e0e0', margin: '4px 0' }} />
 

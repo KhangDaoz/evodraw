@@ -190,6 +190,40 @@
   opacity: 0.75;
 }
 
+/* Opacity slider */
+.opacity-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.opacity-slider-container input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+/* Stroke styles (solid, dashed, dotted) */
+.stroke-style-btn {
+  flex: 1;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.stroke-style-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+.stroke-style-btn.active {
+  border-color: var(--accent);
+  background: rgba(105, 101, 219, 0.08);
+  color: var(--accent);
+}
+
 .animate-fade-in {
   animation: fadeIn 0.2s ease-out;
 }

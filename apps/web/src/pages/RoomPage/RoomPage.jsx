@@ -22,6 +22,8 @@ export default function RoomPage() {
   const [activeTool, setActiveTool] = useState('pen')
   const [strokeColor, setStrokeColor] = useState('#000000')
   const [strokeWidth, setStrokeWidth] = useState(5)
+  const [strokeOpacity, setStrokeOpacity] = useState(1)
+  const [strokeStyle, setStrokeStyle] = useState('solid')
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [toastMessage, setToastMessage] = useState(null)
@@ -160,13 +162,18 @@ export default function RoomPage() {
     updateUsername(newName)
   }
 
+  const canvasRef = useRef(null)
+
   return (
     <div className="room-page">
       <Canvas
+        ref={canvasRef}
         activeTool={activeTool}
         onToolSelect={setActiveTool}
         strokeColor={strokeColor}
         strokeWidth={strokeWidth}
+        strokeOpacity={strokeOpacity}
+        strokeStyle={strokeStyle}
         roomId={roomCode}
         username={username}
         isConnected={isConnected}
@@ -192,6 +199,12 @@ export default function RoomPage() {
         onColorChange={setStrokeColor}
         strokeWidth={strokeWidth}
         onWidthChange={setStrokeWidth}
+        strokeOpacity={strokeOpacity}
+        onOpacityChange={setStrokeOpacity}
+        strokeStyle={strokeStyle}
+        onStyleChange={setStrokeStyle}
+        onUndo={() => canvasRef.current?.undo()}
+        onRedo={() => canvasRef.current?.redo()}
         showHint={false}
         isVoiceActive={isVoiceActive}
         onToggleVoice={toggleVoice}

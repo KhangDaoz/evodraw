@@ -12,8 +12,7 @@ import {
  * real-time operation sync (object:added / modified / removed)
  * and initial state sync for late joiners.
  */
-export default function useCanvasSync(canvas, roomId, isConnected, canvasBgColor, canvasBgId, onBgColorReceived) {
-  const syncState = useRef({ _applying: false })
+export default function useCanvasSync(canvas, syncState, roomId, isConnected, canvasBgColor, canvasBgId, onBgColorReceived) {
   const bgStateRef = useRef({ canvasBgColor, canvasBgId })
 
   // Keep refs updated so closures see the latest value without re-binding everything

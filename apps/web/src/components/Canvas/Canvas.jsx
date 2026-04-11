@@ -2,16 +2,27 @@ import useInfiniteCanvas from '../../hooks/useInfiniteCanvas'
 import useCanvasSync from '../../hooks/useCanvasSync'
 import useDrawingTools from '../../hooks/useDrawingTools'
 import useRemoteCursors from '../../hooks/useRemoteCursors'
+import useHistory from '../../hooks/useHistory'
+import { useRef, useImperativeHandle, forwardRef } from 'react'
 import './Canvas.css'
 
-export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWidth, roomId, username, isConnected, canvasBgColor, canvasBgId, onBgColorChange }) {
+const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle, roomId, username, isConnected, canvasBgColor, canvasBgId, onBgColorChange }, ref) => {
   const { fabricCanvas, containerRef, canvasRef } = useInfiniteCanvas()
+  const syncState = useRef({ _applying: false })
 
   // Real-time sync: serialize canvas ops ↔ socket
-  useCanvasSync(fabricCanvas, roomId, isConnected, canvasBgColor, canvasBgId, onBgColorChange)
+  useCanvasSync(fabricCanvas, syncState, roomId, isConnected, canvasBgColor, canvasBgId, onBgColorChange)
+
+  // Undo/Redo tracking
+  const { undo, redo } = useHistory(fabricCanvas, syncState)
+
+  useImperativeHandle(ref, () => ({
+    undo,
+    redo
+  }))
 
   // Tool handling: pen, eraser, shapes, lines, arrows, text
-  useDrawingTools(fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth)
+  useDrawingTools(fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle)
 
   // Remote cursor sync + coordinate conversion
   const { remoteCursors, sceneToScreen, viewportVersion, getCursorColor } =
@@ -54,4 +65,6 @@ export default function Canvas({ activeTool, onToolSelect, strokeColor, strokeWi
       })}
     </div>
   )
-}
+})
+
+export default Canvas

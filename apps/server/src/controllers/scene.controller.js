@@ -1,64 +1,86 @@
 import Scene from '../models/Scene.js';
+import { generateRoomId, generateRoomKey } from '../utils/codeGenerator.js';
 
-// Create a new scene
+// Create a new scene with unique room id and key
 export const createScene = async (req, res) => {
-  const { roomId, roomKey, elements, appState, sceneVersion } = req.body;
-  try {
-    const existingScene = await Scene.findOne({ roomId });
-    if (existingScene) {
-      return res.status(409).json({message: 'Room is already exists'});
+    try {
+        let roomId = generateRoomId();
+        let isUnique = false;
+        let attempts = 0;
+
+        while (!isUnique && attempts < 5) {
+            const existingScene = await Scene.findOne({ roomId });
+            if (!existingScene) {
+                isUnique = true;
+            } else {
+                roomId = generateRoomId();
+                attempts++;
+            }
+        }
+
+        if (!isUnique) {
+            return res.status(500).json({ 
+                success: false, 
+                message: 'Failed to generate unique room id' 
+            });
+        }
+
+        const roomKey = generateRoomKey();
+
+        const newScene = new Scene({
+            roomId,
+            roomKey,
+            elements: [],
+            appState: {},
+            sceneVersion: 0,
+        });
+
+        const savedScene = await newScene.save();
+        
+        res.status(201).json({
+            success: true,
+            data: {
+                _id: savedScene._id,
+                roomId: savedScene.roomId,
+                roomKey: savedScene.roomKey,
+            }
+        });
+    } catch (error) {
+        console.error('Create scene error:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
     }
-
-    const newScene = new Scene({
-      roomId,
-      roomKey: roomKey,
-      elements: elements || [],
-      appState: appState || {},
-      sceneVersion: sceneVersion || 0,
-    });
-
-    const savedScene = await newScene.save();
-    res.status(201).json(savedScene);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
 };
 
-// Get a scene by roomId
-export const getScene = async (req, res) => {
-  try {
-    const scene = await Scene.findOne({ roomId: req.params.roomId });
-    if (!scene) {
-      return res.status(404).json({ message: 'Not found room' });
+// Join a scene with roomId and roomKey verification
+export const joinScene = async (req, res) => {
+    try {
+        const { roomId, roomKey } = req.body || {};
+
+        const scene = await Scene.findOne({ 
+            roomId: roomId.toUpperCase(),
+            roomKey 
+        });
+
+        if (!scene) {
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Invalid room id or key.' 
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: {
+                _id: scene._id,
+                roomId: scene.roomId,
+                roomKey: scene.roomKey,
+                elements: scene.elements,
+                appState: scene.appState,
+                sceneVersion: scene.sceneVersion,
+            }
+        });
+    } catch (error) {
+        console.error('Join scene error:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
     }
-    res.status(200).json(scene);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// Update a scene
-export const updateScene = async (req, res) => {
-  const { roomId } = req.params;
-  const { elements, appState, sceneVersion } = req.body;
-  try {
-    const updateData = {};
-    if (elements !== undefined) updateData.elements = elements;
-    if (appState !== undefined) updateData.appState = appState;
-    if (sceneVersion !== undefined) updateData.sceneVersion = sceneVersion;
-
-    const updatedScene = await Scene.findOneAndUpdate(
-      { roomId },
-      updateData,
-      { new: true }
-    );
-
-    if (!updatedScene) {
-      return res.status(404).json({ message: 'Not found room' });
-    }
-
-    res.status(200).json(updatedScene);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
 };

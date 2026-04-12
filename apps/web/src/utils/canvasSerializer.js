@@ -1,5 +1,8 @@
 import * as fabric from 'fabric'
 
+// ── Versioning constants ──
+const CUSTOM_PROPS = ['_evoId', '_evoVersion', '_evoNonce']
+
 // Stable unique ID for every Fabric object on this canvas
 let _idCounter = 0
 
@@ -10,10 +13,55 @@ function ensureId(obj) {
   return obj._evoId
 }
 
-// Serialize a single Fabric object → plain JSON payload
+/** Ensure version metadata exists on a Fabric object */
+function ensureVersion(obj) {
+  if (typeof obj._evoVersion !== 'number') obj._evoVersion = 0
+  if (typeof obj._evoNonce !== 'number') obj._evoNonce = Math.floor(Math.random() * 1073741824)
+}
+
+/** Bump version + regenerate nonce (called on every local mutation) */
+function bumpVersion(obj) {
+  ensureVersion(obj)
+  obj._evoVersion += 1
+  obj._evoNonce = Math.floor(Math.random() * 1073741824)
+}
+
+/**
+ * Determine if a remote element should overwrite the local one.
+ * LWW: higher version wins. Same version → lower nonce wins (deterministic).
+ */
+export function shouldAcceptRemote(local, remote) {
+  if (!local) return true
+  const localV = typeof local._evoVersion === 'number' ? local._evoVersion : 0
+  const remoteV = typeof remote._evoVersion === 'number' ? remote._evoVersion : 0
+  if (remoteV > localV) return true
+  if (remoteV === localV) {
+    const localN = typeof local._evoNonce === 'number' ? local._evoNonce : Infinity
+    const remoteN = typeof remote._evoNonce === 'number' ? remote._evoNonce : Infinity
+    return remoteN < localN
+  }
+  return false
+}
+
+/**
+ * Compute a scene version number (sum of all element versions).
+ * Used as a dirty-flag for snapshot persistence.
+ */
+export function getSceneVersion(canvas) {
+  if (!canvas) return 0
+  return canvas.getObjects().reduce((sum, obj) => {
+    return sum + (typeof obj._evoVersion === 'number' ? obj._evoVersion : 0)
+  }, 0)
+}
+
+// Serialize a single Fabric object → plain JSON payload (with version metadata)
 function serializeObject(obj) {
-  const json = obj.toJSON()
-  json._evoId = ensureId(obj)
+  ensureId(obj)
+  ensureVersion(obj)
+  const json = obj.toJSON(CUSTOM_PROPS)
+  json._evoId = obj._evoId
+  json._evoVersion = obj._evoVersion
+  json._evoNonce = obj._evoNonce
   return json
 }
 
@@ -21,6 +69,8 @@ function serializeObject(obj) {
 async function deserializeObject(json) {
   const [obj] = await fabric.util.enlivenObjects([json])
   if (json._evoId) obj._evoId = json._evoId
+  if (typeof json._evoVersion === 'number') obj._evoVersion = json._evoVersion
+  if (typeof json._evoNonce === 'number') obj._evoNonce = json._evoNonce
   return obj
 }
 
@@ -42,6 +92,7 @@ export function attachSerializer(canvas, onOperation, state) {
   const onAdded = ({ target }) => {
     if (state._applying) return
     if (target._evoDrawing) return // skip in-progress shape drawing
+    bumpVersion(target)
     onOperation({
       type: 'object:added',
       object: serializeObject(target),
@@ -50,6 +101,7 @@ export function attachSerializer(canvas, onOperation, state) {
 
   const onModified = ({ target }) => {
     if (state._applying) return
+    bumpVersion(target)
     onOperation({
       type: 'object:modified',
       id: ensureId(target),
@@ -79,6 +131,7 @@ export function attachSerializer(canvas, onOperation, state) {
 
 /**
  * Apply a remote operation to the local canvas without re-emitting it.
+ * Uses LWW reconciliation: only accepts remote if version is newer.
  */
 export async function applyRemoteOp(canvas, op, state) {
   state._applying = true
@@ -86,7 +139,17 @@ export async function applyRemoteOp(canvas, op, state) {
     switch (op.type) {
       case 'object:added': {
         const existing = findById(canvas, op.object._evoId)
-        if (existing) break
+        if (existing) {
+          // Element already exists locally — reconcile
+          if (shouldAcceptRemote(existing, op.object)) {
+            const { _evoId, ...props } = op.object
+            existing.set(props)
+            existing._evoVersion = op.object._evoVersion
+            existing._evoNonce = op.object._evoNonce
+            existing.setCoords()
+          }
+          break
+        }
         const obj = await deserializeObject(op.object)
         canvas.add(obj)
         break
@@ -95,8 +158,12 @@ export async function applyRemoteOp(canvas, op, state) {
       case 'object:modified': {
         const target = findById(canvas, op.id)
         if (!target) break
+        // LWW reconciliation: only apply if remote is newer
+        if (!shouldAcceptRemote(target, op.object)) break
         const { _evoId, ...props } = op.object
         target.set(props)
+        target._evoVersion = op.object._evoVersion
+        target._evoNonce = op.object._evoNonce
         target.setCoords()
         break
       }
@@ -117,6 +184,7 @@ export async function applyRemoteOp(canvas, op, state) {
 
 /**
  * Serialize the full canvas state (for initial sync / snapshots).
+ * Includes version metadata for each element.
  */
 export function serializeCanvas(canvas) {
   const objects = canvas.getObjects().map(serializeObject)

@@ -28,3 +28,39 @@ export async function joinRoom(code, passcode) {
 
   return res.json()
 }
+
+/**
+ * Upload a file (image, etc.) to Firebase Storage via the server.
+ * Returns { success: true, data: { fileId, url, originalName } }
+ */
+export async function uploadFile(roomId, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const res = await fetch(`${BASE_URL}/rooms/${roomId}/files`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || 'Failed to upload file')
+  }
+
+  return res.json()
+}
+
+/**
+ * Get all files for a room.
+ * Returns { success: true, data: [{ fileId, url, originalName, mimetype, size, createdAt }] }
+ */
+export async function getFilesByRoom(roomId) {
+  const res = await fetch(`${BASE_URL}/rooms/${roomId}/files`)
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || 'Failed to fetch files')
+  }
+
+  return res.json()
+}

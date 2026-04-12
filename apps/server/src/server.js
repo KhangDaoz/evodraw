@@ -7,9 +7,11 @@ import cors from 'cors';
 // Configuration & Handlers
 import { connectDB } from './config/db.js';
 import { initializeSockets } from './sockets/index.js';
+import { initFirebase } from './config/firebase.js';
 
 // Routes
 import roomRoutes from './routes/room.routes.js';
+import fileRoutes from './routes/file.routes.js';
 
 // --- App Initialization ---
 const app = express();
@@ -39,6 +41,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // --- REST API Routes ---
 app.use('/api/rooms', roomRoutes);
+app.use('/api/rooms/:roomId/files', fileRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'EvoDraw API Server Operations Normal' });
@@ -53,6 +56,7 @@ app.use((err, req, res, next) => {
 // --- Boot Server ---
 connectDB()
     .then(() => {
+        initFirebase();
         httpServer.listen(PORT, () => {
             console.log(`Server is running on http://localhost:${PORT}`);
         });

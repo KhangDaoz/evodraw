@@ -1,4 +1,5 @@
 import { markRoomActivity } from './room.activity.js';
+import Room from '../models/Room.js';
 
 // In-memory store for room background colors
 const roomBgColors = new Map();
@@ -36,7 +37,37 @@ export const registerDrawHandlers = (io, socket) => {
         markRoomActivity(payload?.roomId);
     });
 
-    // Initial state sync: new joiner asks existing peers for canvas snapshot
+    // ── Snapshot persistence (blind store) ──
+
+    // Client pushes a full canvas snapshot for server-side persistence
+    // Expected payload: { roomId: string, elements: Array, sceneVersion: number }
+    socket.on('save_snapshot', async ({ roomId, elements, sceneVersion }) => {
+        if (!roomId || !Array.isArray(elements) || typeof sceneVersion !== 'number') return;
+        try {
+            await Room.saveSnapshot(roomId, elements, sceneVersion);
+            markRoomActivity(roomId);
+        } catch (err) {
+            console.error(`[Snapshot] Failed to save for room ${roomId}:`, err.message);
+        }
+    });
+
+    // Late joiner requests stored snapshot from server
+    // Server responds with MongoDB data first, also asks peers as fallback
+    socket.on('request_snapshot', async ({ roomId }) => {
+        if (!roomId) return;
+        try {
+            const snapshot = await Room.getSnapshot(roomId);
+            if (snapshot) {
+                socket.emit('snapshot_loaded', snapshot);
+            }
+        } catch (err) {
+            console.error(`[Snapshot] Failed to load for room ${roomId}:`, err.message);
+        }
+        // Also ask peers as fallback (existing behavior)
+        socket.to(roomId).emit('canvas_state_request', { requesterId: socket.id });
+    });
+
+    // Peer-to-peer state sync: new joiner asks existing peers for canvas snapshot
     socket.on('canvas_state_request', ({ roomId }) => {
         socket.to(roomId).emit('canvas_state_request', { requesterId: socket.id });
     });

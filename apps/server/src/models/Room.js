@@ -68,6 +68,52 @@ class Room {
             { $set: { updatedAt: new Date() } },
         );
     }
+
+    /**
+     * Save a canvas snapshot (blind store — server doesn't inspect elements).
+     * Only overwrites if the incoming sceneVersion is newer than what's stored.
+     */
+    static async saveSnapshot(code, elements, sceneVersion) {
+        const normalized = String(code || '').trim().toUpperCase();
+        if (!normalized || !Array.isArray(elements)) return null;
+
+        const collection = this.getCollection();
+        const result = await collection.updateOne(
+            {
+                code: normalized,
+                $or: [
+                    { sceneVersion: { $lt: sceneVersion } },
+                    { sceneVersion: { $exists: false } },
+                ],
+            },
+            {
+                $set: {
+                    elements,
+                    sceneVersion,
+                    updatedAt: new Date(),
+                },
+            },
+        );
+        return result;
+    }
+
+    /**
+     * Retrieve the stored canvas snapshot for a room.
+     * Returns { elements, sceneVersion } or null.
+     */
+    static async getSnapshot(code) {
+        const normalized = String(code || '').trim().toUpperCase();
+        if (!normalized) return null;
+
+        const collection = this.getCollection();
+        const room = await collection.findOne(
+            { code: normalized },
+            { projection: { elements: 1, sceneVersion: 1 } },
+        );
+
+        if (!room || !room.elements || room.elements.length === 0) return null;
+        return { elements: room.elements, sceneVersion: room.sceneVersion || 0 };
+    }
 }
 
 export default Room;

@@ -14,10 +14,9 @@ import roomRoutes from './routes/room.routes.js';
 import fileRoutes from './routes/file.routes.js';
 
 // --- CORS Configuration ---
-const ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "https://evodraw-web.vercel.app"
-];
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173")
+    .split(",")
+    .map(origin => origin.trim());
 
 // --- App Initialization ---
 const app = express();

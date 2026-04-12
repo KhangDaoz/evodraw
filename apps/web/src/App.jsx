@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import LandingPage from './pages/LandingPage/LandingPage'
 import RoomPage from './pages/RoomPage/RoomPage'
+import JoinPage from './pages/JoinPage/JoinPage'
 import './App.css'
 
 // Apply persisted theme immediately to prevent flash
@@ -12,6 +13,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/room/:roomCode" element={<RoomPage />} />
+      <Route path="/join/:token" element={<JoinPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

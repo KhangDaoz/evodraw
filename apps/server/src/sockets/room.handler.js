@@ -4,14 +4,14 @@ import Room from '../models/Room.js';
 // roomId -> Map<socketId, username>
 const roomMembers = new Map();
 
-function getRoomUsernames(roomId) {
+function getRoomUsers(roomId) {
     const members = roomMembers.get(roomId);
     if (!members) return [];
-    return [...new Set(members.values())];
+    return Array.from(members.entries()).map(([socketId, username]) => ({ socketId, username }));
 }
 
 function broadcastRoomUsers(io, roomId) {
-    io.to(roomId).emit('room_users', { users: getRoomUsernames(roomId) });
+    io.to(roomId).emit('room_users', { users: getRoomUsers(roomId) });
 }
 
 export const registerRoomHandlers = (io, socket) => {

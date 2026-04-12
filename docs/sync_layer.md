@@ -52,6 +52,19 @@ Mục tiêu cốt lõi của nhánh này là chuyển đổi EvoDraw từ một 
 ### Tại sao lại chọn cách này?
 - Đảm bảo tính mở rộng của mã nguồn (Scalability), tách biệt hoàn toàn giữa việc **Vẽ (Drawing Logic)** và **Đồng Bộ (Sync Logic)** ra khỏi thành phần hiển thị (UI Components). Quá trình này rất quan trọng để đảm bảo việc debug các packet gửi/nhận thời gian thực không bị nhầm lẫn vào logic Render React.
 
+## 4. Hoàn thiện Trải nghiệm Cộng tác & Sửa lỗi (Fixes & UX)
+
+### Đã làm gì?
+- **Khắc phục lỗi Đếm User trong phòng (Room Presence Collision):** Thay đổi phương thức quản lý người dùng từ việc đối chiếu chuỗi string (tên) sang quản lý danh sách object theo `socketId` (Transport-level ID).
+- **Sửa lỗi tính năng Hoàn tác/Làm lại (Undo/Redo):** Bổ sung lời gọi `requestRenderAll()` sau quy trình `applyOp` của custom hook `useHistory.js`. 
+- **Quy trình Tham gia Phòng (Share & Join Link):** Xây dựng luồng (flow) mời người mới bằng URL `/join/:token` mã hóa, kèm trang thiết lập cho phép người dùng tùy chọn tên định danh trước khi nhảy vào phòng.
+
+### Tại sao lại thực hiện?
+- **Room Presence:** Phương pháp lưu tên cũ qua thẻ `Set(...)` gây ra trường hợp những người cùng tên (ví dụ: "Anonymous") đè lên nhau, làm bảng điều khiển (Members panel) hiển thị sai số lượng người. Việc sử dụng `socket.id` định danh duy nhất các kết nối bảo đảm tính minh bạch tuyệt đối.
+- **Undo/Redo:** Ở Fabric.js, đối tượng đã bị xóa/thêm về mặt cấu trúc dữ liệu (Tree node) nhưng lại không tự động xuất ra màn hình DOM (thường gây ra lỗi ấn Undo nhưng màn hình không thay đổi). Bổ sung hàm render tường minh ở khối mã `finally` đảm bảo 100% hình vẽ thay đổi ngay lập tức.
+- **Join Link:** Là tính năng cốt lõi của mọi Whiteboard, việc chia sẻ qua Link giúp EvoDraw dễ dàng hóa luồng người dùng truy cập (Onboarding) và bảo mật mã phòng/mật khẩu dưới Base64.
+
 ---
 > [!NOTE]
-> **Tổng kết (Conclusion):** Nhánh này đã biến EvoDraw thành một hệ thống Client-Authoritative. Backend lúc này đóng vai trò như một bộ Router chuyển tiếp Message và Lưu trạng thái Room định kỳ, trong khi đó bộ não phân xử logic xung đột nằm ở chính các trình duyệt Clients thông qua cơ chế `_evoVersion` rất hiệu quả. Đoạn mã đã xử lý trọn vẹn những điểm khó nhất của công nghệ Collaborative Whiteboard hiện tại.
+> **Tổng kết (Conclusion):** Nhánh này đã biến EvoDraw thành một hệ thống Client-Authoritative. Backend lúc này đóng vai trò như một bộ Router chuyển tiếp Message và Lưu trạng thái Room định kỳ, trong khi đó bộ não phân xử logic xung đột nằm ở chính các trình duyệt Clients thông qua cơ chế `_evoVersion` rất hiệu quả. Các bản vá gần đây nhất liên quan đến định tuyến và hiệu năng vẽ đảm bảo hệ thống đạt độ ổn định ở mức Production-ready.
+

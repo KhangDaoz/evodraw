@@ -14,7 +14,7 @@ import roomRoutes from './routes/room.routes.js';
 import fileRoutes from './routes/file.routes.js';
 
 // --- CORS Configuration ---
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173");
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(',').map(o => o.trim());
 
 // --- App Initialization ---
 const app = express();
@@ -24,7 +24,13 @@ const httpServer = createServer(app);
 // --- WebSocket Setup ---
 const io = new Server(httpServer, {
     cors: {
-        origin: ALLOWED_ORIGINS,
+        origin: (origin, callback) => {
+            if (!origin || ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         methods: ["GET", "POST"],
         credentials: true
     }
@@ -37,9 +43,10 @@ initializeSockets(io);
 app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps or curl)
-        if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        if (!origin || ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
             callback(null, true);
         } else {
+            console.error(`[CORS Blocked] Origin: ${origin} not in ${ALLOWED_ORIGINS}`);
             // For development/tunnels where origin might change, 
             // you could temporarily just return callback(null, true)
             callback(new Error('Not allowed by CORS'));

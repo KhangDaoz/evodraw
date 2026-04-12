@@ -142,7 +142,7 @@ export async function applyRemoteOp(canvas, op, state) {
         if (existing) {
           // Element already exists locally — reconcile
           if (shouldAcceptRemote(existing, op.object)) {
-            const { _evoId, ...props } = op.object
+            const { _evoId, type, version, ...props } = op.object
             existing.set(props)
             existing._evoVersion = op.object._evoVersion
             existing._evoNonce = op.object._evoNonce
@@ -160,7 +160,7 @@ export async function applyRemoteOp(canvas, op, state) {
         if (!target) break
         // LWW reconciliation: only apply if remote is newer
         if (!shouldAcceptRemote(target, op.object)) break
-        const { _evoId, ...props } = op.object
+        const { _evoId, type, version, ...props } = op.object
         target.set(props)
         target._evoVersion = op.object._evoVersion
         target._evoNonce = op.object._evoNonce

@@ -261,3 +261,36 @@
   color: #dc2626;
   border-color: #fecaca;
 }
+
+.share-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-light);
+  transition: all 0.2s;
+}
+
+.share-btn:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.share-btn.copied {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: #10b981;
+  color: #10b981;
+  border-style: solid;
+}
+
+[data-theme="dark"] .share-btn.copied {
+  background: rgba(16, 185, 129, 0.15);
+}

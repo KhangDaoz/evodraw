@@ -25,8 +25,6 @@ export default function useInfiniteCanvas() {
       perPixelTargetFind: true,
       // Hit tolerance in px — user doesn't need pixel-perfect aim on thin strokes
       targetFindTolerance: 5,
-      fireRightClick: true,
-      stopContextMenu: true,
     })
 
     setFabricCanvas(canvas)

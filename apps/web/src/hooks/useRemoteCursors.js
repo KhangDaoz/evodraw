@@ -67,26 +67,43 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
     }
   }, [roomId, isConnected, username])
 
+  const throttleTimeoutRef = useRef(null)
+
   // Emit own cursor position (throttled) on mouse move
   useEffect(() => {
     if (!fabricCanvas || !roomId || !isConnected) return
 
     const onMouseMove = (opt) => {
       const now = Date.now()
-      if (now - lastEmitRef.current < CURSOR_THROTTLE_MS) return
-      lastEmitRef.current = now
-
-      const socket = getSocket()
-      if (!socket) return
-
       const pt = fabricCanvas.getScenePoint(opt.e)
-      socket.emit('cursor_move', { roomId, position: { x: pt.x, y: pt.y }, username })
+
+      const emitMove = () => {
+        const socket = getSocket()
+        if (socket) {
+          socket.emit('cursor_move', { roomId, position: { x: pt.x, y: pt.y }, username })
+          lastEmitRef.current = Date.now()
+        }
+      }
+
+      const timeSinceLastEmit = now - lastEmitRef.current
+
+      if (timeSinceLastEmit >= CURSOR_THROTTLE_MS) {
+        emitMove()
+        if (throttleTimeoutRef.current) {
+          clearTimeout(throttleTimeoutRef.current)
+          throttleTimeoutRef.current = null
+        }
+      } else {
+        if (throttleTimeoutRef.current) clearTimeout(throttleTimeoutRef.current)
+        throttleTimeoutRef.current = setTimeout(emitMove, CURSOR_THROTTLE_MS - timeSinceLastEmit)
+      }
     }
 
     fabricCanvas.on('mouse:move', onMouseMove)
 
     return () => {
       fabricCanvas.off('mouse:move', onMouseMove)
+      if (throttleTimeoutRef.current) clearTimeout(throttleTimeoutRef.current)
     }
   }, [fabricCanvas, roomId, isConnected, username])
 

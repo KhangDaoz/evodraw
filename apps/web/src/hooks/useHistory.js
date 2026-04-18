@@ -98,7 +98,7 @@ export default function useHistory(canvas, syncState) {
     return canvas.getObjects().find((o) => o._evoId === evoId || (o.toJSON()._evoId === evoId)) || null
   }
 
-  const applyOp = async (op, isUndo) => {
+  const applyOp = useCallback(async (op, isUndo) => {
     if (!canvas) return
     historyApplying.current = true
 
@@ -137,28 +137,28 @@ export default function useHistory(canvas, syncState) {
           const { _evoId, ...props } = stateToApply
           target.set(props)
           target.setCoords()
-          canvas.requestRenderAll()
           canvas.fire('object:modified', { target })
         }
       }
     } finally {
+      if (canvas) canvas.requestRenderAll()
       historyApplying.current = false
     }
-  }
+  }, [canvas])
 
   const undo = useCallback(async () => {
     if (undoStack.current.length === 0) return
     const op = undoStack.current.pop()
     redoStack.current.push(op)
     await applyOp(op, true)
-  }, [])
+  }, [applyOp])
 
   const redo = useCallback(async () => {
     if (redoStack.current.length === 0) return
     const op = redoStack.current.pop()
     undoStack.current.push(op)
     await applyOp(op, false)
-  }, [])
+  }, [applyOp])
 
   // Keyboard shortcuts setup
   useEffect(() => {

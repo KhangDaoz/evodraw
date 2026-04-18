@@ -3,6 +3,7 @@ import { useParams, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import useRoom from '../../hooks/useRoom'
 import useChat from '../../hooks/useChat'
 import useVoiceChat from '../../hooks/useVoiceChat'
+import useScreenShare from '../../hooks/useScreenShare'
 import { getSocket } from '../../services/socket'
 import Toolbar from '../../components/Toolbar/Toolbar'
 import BottomBar from '../../components/BottomBar/BottomBar'
@@ -78,7 +79,22 @@ export default function RoomPage() {
 
   const { isConnected, connectedUsers, error, updateUsername } = useRoom(roomCode, username, passcode)
   const { messages, sendMessage } = useChat(roomCode, username)
-  const { isVoiceActive, toggleVoice, streams } = useVoiceChat(roomCode, username)
+
+  // Shared WebRTC peer connection pool (used by both voice chat and screen share)
+  const peersRef = useRef({})
+  const { isVoiceActive, toggleVoice, streams } = useVoiceChat(roomCode, username, peersRef)
+
+  // Screen share — needs fabricCanvas from canvas ref
+  const [fabricCanvas, setFabricCanvas] = useState(null)
+  const { isSharing, activeShares, startSharing, stopSharing } = useScreenShare(
+    roomCode, username, isConnected, fabricCanvas, peersRef
+  )
+
+  // Keep fabricCanvas in sync when canvas ref mounts
+  useEffect(() => {
+    const fc = canvasRef.current?.getFabricCanvas()
+    if (fc && fc !== fabricCanvas) setFabricCanvas(fc)
+  })
 
   // Canvas Background Color sync — listen for remote changes
   useEffect(() => {
@@ -164,6 +180,15 @@ export default function RoomPage() {
 
   const canvasRef = useRef(null)
 
+  // Sync fabricCanvas after initial render when canvas ref is available
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const fc = canvasRef.current?.getFabricCanvas()
+      if (fc && fc !== fabricCanvas) setFabricCanvas(fc)
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [fabricCanvas])
+
   return (
     <div className="room-page">
       <Canvas
@@ -208,6 +233,9 @@ export default function RoomPage() {
         showHint={false}
         isVoiceActive={isVoiceActive}
         onToggleVoice={toggleVoice}
+        isScreenSharing={isSharing}
+        activeShareCount={activeShares.size}
+        onToggleScreenShare={isSharing ? stopSharing : startSharing}
       />
 
       {/* Status bar */}

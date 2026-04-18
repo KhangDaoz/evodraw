@@ -35,7 +35,7 @@ export default function MembersPanel({ currentUser, connectedUsers, isConnected 
 
   // Total count includes self
   const allUsers = currentUser
-    ? [currentUser, ...connectedUsers.filter((u) => u !== currentUser)]
+    ? [{ socketId: 'self', username: currentUser }, ...connectedUsers]
     : connectedUsers
   const count = allUsers.length
 
@@ -60,7 +60,7 @@ export default function MembersPanel({ currentUser, connectedUsers, isConnected 
         {/* Stack up to 3 avatars */}
         <div className="avatar-stack">
           {allUsers.slice(0, 3).map((u) => (
-            <Avatar key={u} name={u} size={24} />
+            <Avatar key={u.socketId} name={u.username} size={24} />
           ))}
         </div>
 
@@ -79,11 +79,11 @@ export default function MembersPanel({ currentUser, connectedUsers, isConnected 
 
           <ul className="members-list">
             {allUsers.map((u) => (
-              <li key={u} className="member-row">
-                <Avatar name={u} size={32} />
+              <li key={u.socketId} className="member-row">
+                <Avatar name={u.username} size={32} />
                 <span className="member-name">
-                  {u}
-                  {u === currentUser && <span className="you-badge">you</span>}
+                  {u.username}
+                  {u.socketId === 'self' && <span className="you-badge">you</span>}
                 </span>
                 <span className="member-online-dot" />
               </li>

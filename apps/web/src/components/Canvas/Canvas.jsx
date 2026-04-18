@@ -3,6 +3,8 @@ import useCanvasSync from '../../hooks/useCanvasSync'
 import useDrawingTools from '../../hooks/useDrawingTools'
 import useRemoteCursors from '../../hooks/useRemoteCursors'
 import useHistory from '../../hooks/useHistory'
+import useImagePasting from '../../hooks/useImagePasting'
+
 import { useRef, useImperativeHandle, forwardRef } from 'react'
 import './Canvas.css'
 
@@ -18,8 +20,12 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
 
   useImperativeHandle(ref, () => ({
     undo,
-    redo
+    redo,
+    getFabricCanvas: () => fabricCanvas,
   }))
+
+  // Image pasting support
+  useImagePasting(fabricCanvas, containerRef, roomId)
 
   // Tool handling: pen, eraser, shapes, lines, arrows, text
   useDrawingTools(fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle)

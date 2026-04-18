@@ -120,7 +120,10 @@ export default function Toolbar({
   onRedo,
   showHint,
   isVoiceActive,
-  onToggleVoice
+  onToggleVoice,
+  isScreenSharing,
+  activeShareCount = 0,
+  onToggleScreenShare
 }) {
   const [showOptions, setShowOptions] = useState(false)
   const [showShapeOptions, setShowShapeOptions] = useState(false)
@@ -425,6 +428,37 @@ export default function Toolbar({
                 <line x1="12" y1="19" x2="12" y2="23"></line>
                 <line x1="8" y1="23" x2="16" y2="23"></line>
               </svg>
+            )}
+          </button>
+        )}
+
+        {/* Screen Share Toggle */}
+        {onToggleScreenShare && (
+          <button
+            className={`tool-btn ${isScreenSharing ? 'active screen-active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleScreenShare()
+            }}
+            title={isScreenSharing ? "Stop Screen Share" : "Share Screen"}
+            style={{ position: 'relative' }}
+          >
+            {isScreenSharing ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+                <line x1="2" y1="3" x2="22" y2="17" stroke="currentColor" strokeWidth="2.5"></line>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+              </svg>
+            )}
+            {activeShareCount > 0 && !isScreenSharing && (
+              <span className="screen-share-badge">{activeShareCount}</span>
             )}
           </button>
         )}

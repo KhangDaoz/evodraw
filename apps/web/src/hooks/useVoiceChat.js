@@ -8,12 +8,19 @@ const ICE_SERVERS = {
   ]
 };
 
-export default function useVoiceChat(roomId, currentUsername) {
+/**
+ * WebRTC voice chat hook with shared peer connection pool.
+ *
+ * @param {string} roomId
+ * @param {string} currentUsername
+ * @param {React.MutableRefObject} peersRef - Shared ref: { socketId: RTCPeerConnection }
+ *   Both useVoiceChat and useScreenShare add/remove tracks on the same connections.
+ */
+export default function useVoiceChat(roomId, currentUsername, peersRef) {
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [streams, setStreams] = useState({}); // { socketId: MediaStream }
   
   const localStreamRef = useRef(null);
-  const peersRef = useRef({}); // { socketId: RTCPeerConnection }
   const iceCandidateQueues = useRef({}); // { socketId: RTCIceCandidateInit[] }
   
   const usernameRef = useRef(currentUsername);
@@ -33,7 +40,7 @@ export default function useVoiceChat(roomId, currentUsername) {
       return newStreams;
     });
     delete iceCandidateQueues.current[socketId];
-  }, []);
+  }, [peersRef]);
 
   // Cleanup all connections
   const cleanupAll = useCallback(() => {
@@ -42,7 +49,7 @@ export default function useVoiceChat(roomId, currentUsername) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
     }
-  }, [cleanupPeer]);
+  }, [cleanupPeer, peersRef]);
 
   const processIceQueue = useCallback(async (socketId, pc) => {
     const queue = iceCandidateQueues.current[socketId];
@@ -66,12 +73,12 @@ export default function useVoiceChat(roomId, currentUsername) {
           track.stop();
         });
         
-        // Remove track from all existing peer connections
+        // Remove audio tracks from all existing peer connections
         Object.entries(peersRef.current).forEach(([socketId, pc]) => {
-          const senders = pc.getSenders();
+          const senders = pc.getSenders().filter(s => s.track?.kind === 'audio');
           senders.forEach(sender => pc.removeTrack(sender));
           
-          // Renegotiate to stop sending media
+          // Renegotiate
           pc.createOffer()
             .then(offer => pc.setLocalDescription(offer).then(() => offer))
             .then(offer => {
@@ -96,13 +103,13 @@ export default function useVoiceChat(roomId, currentUsername) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         localStreamRef.current = stream;
         
-        // Add track to all existing peer connections
+        // Add audio track to all existing peer connections
         Object.entries(peersRef.current).forEach(([socketId, pc]) => {
           stream.getTracks().forEach(track => {
             pc.addTrack(track, stream);
           });
           
-          // Renegotiate to send new media
+          // Renegotiate
           pc.createOffer()
             .then(offer => pc.setLocalDescription(offer).then(() => offer))
             .then(offer => {
@@ -124,7 +131,7 @@ export default function useVoiceChat(roomId, currentUsername) {
         setIsVoiceActive(false);
       }
     }
-  }, [isVoiceActive]);
+  }, [isVoiceActive, peersRef]);
 
   // Create a new RTCPeerConnection and bind events
   const createPeerConnection = useCallback((targetSocketId) => {
@@ -139,12 +146,18 @@ export default function useVoiceChat(roomId, currentUsername) {
     // Force an audio transceiver from the start so the connection negotiates properly
     pc.addTransceiver('audio', { direction: 'recvonly' });
 
-    // Add local tracks if we already have them active
+    // Add local audio tracks if we already have them active
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current);
       });
     }
+
+    // Notify listeners that a new peer connection was created
+    // (used by useScreenShare to add video tracks)
+    window.dispatchEvent(new CustomEvent('evodraw:peer_created', {
+      detail: { socketId: targetSocketId, pc }
+    }));
 
     // Handle incoming ICE candidates
     pc.onicecandidate = (event) => {
@@ -158,10 +171,22 @@ export default function useVoiceChat(roomId, currentUsername) {
 
     // Handle receiving a remote stream
     pc.ontrack = (event) => {
-      setStreams(prev => ({
-        ...prev,
-        [targetSocketId]: event.streams[0]
-      }));
+      const track = event.track;
+      const stream = event.streams[0];
+
+      if (track.kind === 'audio') {
+        setStreams(prev => ({
+          ...prev,
+          [targetSocketId]: stream
+        }));
+      }
+
+      if (track.kind === 'video') {
+        // Dispatch event for useScreenShare to handle
+        window.dispatchEvent(new CustomEvent('evodraw:remote_video_track', {
+          detail: { socketId: targetSocketId, track, stream }
+        }));
+      }
     };
 
     // Handle connection state changes for cleanup
@@ -172,7 +197,7 @@ export default function useVoiceChat(roomId, currentUsername) {
     };
 
     return pc;
-  }, [cleanupPeer]);
+  }, [cleanupPeer, peersRef]);
 
   useEffect(() => {
     const socket = getSocket();

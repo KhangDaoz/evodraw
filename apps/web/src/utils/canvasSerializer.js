@@ -92,6 +92,7 @@ export function attachSerializer(canvas, onOperation, state) {
   const onAdded = ({ target }) => {
     if (state._applying) return
     if (target._evoDrawing) return // skip in-progress shape drawing
+    if (target._evoScreenShare) return // skip live screen share objects
     bumpVersion(target)
     onOperation({
       type: 'object:added',
@@ -101,6 +102,7 @@ export function attachSerializer(canvas, onOperation, state) {
 
   const onModified = ({ target }) => {
     if (state._applying) return
+    if (target._evoScreenShare) return // skip live screen share objects
     bumpVersion(target)
     onOperation({
       type: 'object:modified',
@@ -112,6 +114,7 @@ export function attachSerializer(canvas, onOperation, state) {
   const onRemoved = ({ target }) => {
     if (state._applying) return
     if (target._evoDrawing) return // skip temp arrow parts
+    if (target._evoScreenShare) return // skip live screen share objects
     onOperation({
       type: 'object:removed',
       id: ensureId(target),
@@ -187,7 +190,9 @@ export async function applyRemoteOp(canvas, op, state) {
  * Includes version metadata for each element.
  */
 export function serializeCanvas(canvas) {
-  const objects = canvas.getObjects().map(serializeObject)
+  const objects = canvas.getObjects()
+    .filter(obj => !obj._evoScreenShare) // exclude live screen shares
+    .map(serializeObject)
   return { objects }
 }
 

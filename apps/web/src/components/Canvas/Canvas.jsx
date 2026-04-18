@@ -19,7 +19,8 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
 
   useImperativeHandle(ref, () => ({
     undo,
-    redo
+    redo,
+    getFabricCanvas: () => fabricCanvas,
   }))
 
   // Image pasting support

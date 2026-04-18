@@ -21,21 +21,30 @@ function getSharerColor(username) {
 }
 
 /**
- * Create a Fabric.js Image object from a video element for screen sharing.
- * The object is movable, resizable, and maintains aspect ratio.
+ * Create a Fabric.js Rect with a custom _render override that draws
+ * live video frames directly. This bypasses Fabric v7's Image caching
+ * which doesn't properly handle dynamic canvas/video sources.
  *
  * @param {HTMLVideoElement} videoEl - The video element with the screen share stream
  * @param {string} shareId - Unique share identifier
  * @param {string} username - Name of the sharer
  * @param {fabric.Canvas} canvas - The Fabric canvas instance
- * @returns {fabric.Image} The configured Fabric image object
+ * @returns {fabric.Rect} The configured Fabric object
  */
 export function createScreenShareImage(videoEl, shareId, username, canvas) {
   const color = getSharerColor(username)
 
-  const img = new fabric.Image(videoEl, {
+  const videoW = videoEl.videoWidth || 1920
+  const videoH = videoEl.videoHeight || 1080
+
+  console.log(`[ScreenShare] Creating video object: ${videoW}x${videoH} for ${username}`)
+
+  const rect = new fabric.Rect({
     left: 100,
     top: 100,
+    width: videoW,
+    height: videoH,
+    fill: 'transparent',
     originX: 'left',
     originY: 'top',
     selectable: true,
@@ -50,68 +59,85 @@ export function createScreenShareImage(videoEl, shareId, username, canvas) {
     transparentCorners: false,
     borderScaleFactor: 2,
     padding: 4,
-    // Prevent free rotation — screen shares should stay upright
     lockRotation: true,
-    // Don't include rotation point
     hasRotatingPoint: false,
+    objectCaching: false,
+    // Transparent stroke — the border is handled by Fabric controls
+    stroke: color,
+    strokeWidth: 2,
   })
+
+  // Override _render to draw video frames directly onto the Fabric canvas context
+  // This completely bypasses Fabric's Image/texture caching
+  rect._videoEl = videoEl
+  const originalRender = rect._render.bind(rect)
+  rect._render = function (ctx) {
+    // Draw the video frame directly
+    if (this._videoEl && this._videoEl.readyState >= this._videoEl.HAVE_CURRENT_DATA) {
+      ctx.drawImage(this._videoEl, -this.width / 2, -this.height / 2, this.width, this.height)
+    } else {
+      // Fallback: draw a placeholder rectangle
+      originalRender(ctx)
+    }
+  }
 
   // Scale to a reasonable default size (640x360 or fit within viewport)
   const vw = canvas.getWidth()
   const vh = canvas.getHeight()
   const maxW = Math.min(640, vw * 0.6)
   const maxH = Math.min(360, vh * 0.6)
-  const videoW = videoEl.videoWidth || 1920
-  const videoH = videoEl.videoHeight || 1080
   const scale = Math.min(maxW / videoW, maxH / videoH, 1)
-  img.scaleX = scale
-  img.scaleY = scale
+  rect.scaleX = scale
+  rect.scaleY = scale
 
   // Center on viewport
   const vpt = canvas.viewportTransform
   const centerX = (vw / 2 - vpt[4]) / vpt[0]
   const centerY = (vh / 2 - vpt[5]) / vpt[3]
-  img.left = centerX - (videoW * scale) / 2
-  img.top = centerY - (videoH * scale) / 2
+  rect.left = centerX - (videoW * scale) / 2
+  rect.top = centerY - (videoH * scale) / 2
 
   // Mark as screen share (excluded from serialization/snapshots)
-  img._evoScreenShare = true
-  img._evoShareId = shareId
-  img._evoShareUser = username
-  img._evoShareColor = color
+  rect._evoScreenShare = true
+  rect._evoShareId = shareId
+  rect._evoShareUser = username
+  rect._evoShareColor = color
 
-  return img
+  return rect
 }
 
 /**
- * Start a render loop that continuously updates the fabric.Image
- * with new frames from the video element.
+ * Start a render loop that triggers canvas re-renders at the target FPS
+ * so the custom _render override draws fresh video frames.
  *
  * @param {fabric.Canvas} canvas - The Fabric canvas instance
- * @param {fabric.Image} fabricImage - The fabric image to update
+ * @param {fabric.Object} fabricObj - The fabric object with custom _render
  * @param {HTMLVideoElement} videoEl - The source video element
  * @param {string} shareId - The share ID for tracking
  */
-export function startFrameLoop(canvas, fabricImage, videoEl, shareId) {
+export function startFrameLoop(canvas, fabricObj, videoEl, shareId) {
   // Cancel any existing loop for this shareId
   stopFrameLoop(shareId)
 
   let lastTime = 0
-  const TARGET_FPS = 24 // Cap at 24fps to save CPU
+  let frameCount = 0
+  const TARGET_FPS = 24
   const FRAME_INTERVAL = 1000 / TARGET_FPS
 
   function render(now) {
-    if (!canvas || !fabricImage || !fabricImage.canvas) {
+    if (!canvas || !fabricObj || !fabricObj.canvas) {
+      console.warn('[ScreenShare] Render loop stopped — object detached from canvas')
       renderLoops.delete(shareId)
       return
     }
 
     if (now - lastTime >= FRAME_INTERVAL) {
-      // Update the image element source to trigger re-render
       if (videoEl.readyState >= videoEl.HAVE_CURRENT_DATA) {
-        fabricImage.setElement(videoEl)
-        fabricImage.setCoords()
-        canvas.requestRenderAll()
+        canvas.renderAll()
+        frameCount++
+        if (frameCount % 72 === 1) {
+          console.log(`[ScreenShare] Render loop active, frame #${frameCount}`)
+        }
       }
       lastTime = now
     }

@@ -77,6 +77,7 @@ export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, 
     // Erase topmost object under cursor (per-pixel stroke detection)
     const eraseAt = (o) => {
       if (o.target) {
+        if (o.target._evoScreenShare) return // screen shares are not erasable
         fabricCanvas.remove(o.target)
         fabricCanvas.requestRenderAll()
       }

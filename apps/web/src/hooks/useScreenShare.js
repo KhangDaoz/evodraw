@@ -59,7 +59,15 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
 
   // Start sharing my screen
   const startSharing = useCallback(async () => {
-    if (isSharing || !fabricCanvas) return
+    if (isSharing) {
+      console.log('[ScreenShare] Already sharing, ignoring')
+      return
+    }
+    if (!fabricCanvas) {
+      console.warn('[ScreenShare] fabricCanvas is null — cannot start sharing')
+      return
+    }
+    console.log('[ScreenShare] Starting screen share...')
 
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -117,14 +125,16 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       document.body.appendChild(videoEl)
 
       videoEl.onloadedmetadata = () => {
-        videoEl.play()
-        const img = createScreenShareImage(videoEl, shareId, usernameRef.current + ' (You)', fabricCanvas)
-        fabricCanvas.add(img)
-        fabricCanvas.requestRenderAll()
-        startFrameLoop(fabricCanvas, img, videoEl, shareId)
+        videoEl.play().then(() => {
+          console.log('[ScreenShare] Local video playing, creating canvas object', videoEl.videoWidth, 'x', videoEl.videoHeight)
+          const img = createScreenShareImage(videoEl, shareId, usernameRef.current + ' (You)', fabricCanvas)
+          fabricCanvas.add(img)
+          fabricCanvas.requestRenderAll()
+          startFrameLoop(fabricCanvas, img, videoEl, shareId)
 
-        videoElementsRef.current.set(shareId, videoEl)
-        fabricImagesRef.current.set(shareId, img)
+          videoElementsRef.current.set(shareId, videoEl)
+          fabricImagesRef.current.set(shareId, img)
+        }).catch(err => console.error('[ScreenShare] Local video play failed', err))
       }
 
       // Auto-cleanup when user clicks "Stop sharing" in browser chrome
@@ -288,16 +298,17 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       document.body.appendChild(videoEl)
 
       videoEl.onloadedmetadata = () => {
-        videoEl.play()
-        const img = createScreenShareImage(videoEl, matchedShareId, matchedUsername, fabricCanvas)
-        fabricCanvas.add(img)
-        // Send to back so drawings appear on top
-        fabricCanvas.sendObjectToBack(img)
-        fabricCanvas.requestRenderAll()
-        startFrameLoop(fabricCanvas, img, videoEl, matchedShareId)
+        videoEl.play().then(() => {
+          console.log('[ScreenShare] Remote video playing, creating canvas object', videoEl.videoWidth, 'x', videoEl.videoHeight)
+          const img = createScreenShareImage(videoEl, matchedShareId, matchedUsername, fabricCanvas)
+          fabricCanvas.add(img)
+          fabricCanvas.sendObjectToBack(img)
+          fabricCanvas.requestRenderAll()
+          startFrameLoop(fabricCanvas, img, videoEl, matchedShareId)
 
-        videoElementsRef.current.set(matchedShareId, videoEl)
-        fabricImagesRef.current.set(matchedShareId, img)
+          videoElementsRef.current.set(matchedShareId, videoEl)
+          fabricImagesRef.current.set(matchedShareId, img)
+        }).catch(err => console.error('[ScreenShare] Remote video play failed', err))
       }
     }
 

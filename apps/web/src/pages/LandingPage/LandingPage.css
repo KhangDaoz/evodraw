@@ -1,0 +1,116 @@
+/* === Landing Page Styles === */
+
+/* Welcome overlay (centered) */
+.welcome {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.welcome-title {
+  font-family: 'Caveat', cursive;
+  font-size: 64px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 16px;
+  line-height: 1;
+}
+
+.welcome-desc {
+  font-size: 13px;
+  color: var(--text-light);
+  text-align: center;
+  line-height: 1.7;
+  margin: 0 0 24px;
+}
+
+/* Error message */
+.welcome-error {
+  font-size: 13px;
+  color: #e8564a;
+  margin-bottom: 12px;
+  text-align: center;
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+/* Join form */
+.welcome-form {
+  display: flex;
+  gap: 8px;
+}
+
+.welcome-form input {
+  padding: 10px 14px;
+  width: 120px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: none;
+  font-size: 14px;
+  color: var(--text);
+  text-align: center;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.welcome-form input::placeholder {
+  color: var(--text-muted);
+}
+
+.welcome-form input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(105, 101, 219, 0.08);
+}
+
+.welcome-form button {
+  padding: 10px 28px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.welcome-form button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.welcome-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Settings hint (top-right pointer) */
+.settings-hint {
+  position: absolute;
+  top: 20px;
+  right: 68px;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.settings-hint span {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.settings-hint svg {
+  opacity: 0.55;
+}

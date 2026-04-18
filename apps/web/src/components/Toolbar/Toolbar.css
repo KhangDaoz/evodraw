@@ -1,0 +1,243 @@
+/* === Toolbar === */
+
+.toolbar-area {
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  transform: translateY(-50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.tool-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text-light);
+  transition: background 0.15s, color 0.15s;
+}
+
+.tool-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.tool-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.tool-btn.active {
+  background: rgba(105, 101, 219, 0.12);
+  color: var(--accent);
+}
+
+/* Hint below toolbar */
+.toolbar-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding-left: 4px;
+}
+
+.toolbar-hint svg {
+  opacity: 0.5;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.toolbar-hint p {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* Tool Settings Menu */
+.tool-options {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  margin-left: 4px; /* Optional slight separation from toolbar */
+}
+
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.option-group label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+/* Color swatches grid */
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 132px;
+}
+
+.color-swatch-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--swatch);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+
+.color-swatch-btn:hover {
+  transform: scale(1.15);
+}
+
+.color-swatch-btn.active {
+  outline: 3px solid var(--swatch);
+  outline-offset: 2px;
+  transform: scale(1.1);
+}
+
+/* Custom color picker button (+ icon) */
+.color-custom-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  position: relative;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.color-custom-btn:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+.color-custom-btn svg {
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+}
+
+/* Stroke size presets */
+.stroke-presets {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.stroke-preset-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: transparent;
+  color: var(--text);
+}
+
+.stroke-preset-btn:hover {
+  background: var(--border);
+  border-color: var(--text-muted);
+}
+
+.stroke-preset-btn.active {
+  border-color: var(--accent);
+  background: rgba(105, 101, 219, 0.08);
+}
+
+.stroke-dot {
+  display: block;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+/* Opacity slider */
+.opacity-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.opacity-slider-container input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+/* Stroke styles (solid, dashed, dotted) */
+.stroke-style-btn {
+  flex: 1;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.stroke-style-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+.stroke-style-btn.active {
+  border-color: var(--accent);
+  background: rgba(105, 101, 219, 0.08);
+  color: var(--accent);
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.tool-btn.voice-active {
+  color: #ef4444; /* Red color to indicate mic isn't muted/recording */
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.tool-btn.voice-active:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+}

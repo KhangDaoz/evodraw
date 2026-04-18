@@ -1,0 +1,71 @@
+/* === Global Reset & Variables === */
+
+:root {
+  --accent: #6965db;
+  --accent-hover: #5753cc;
+  --text: #1b1b1f;
+  --text-light: #65656d;
+  --text-muted: #a0a0a8;
+  --border: #e0e0e0;
+  --surface: #ffffff;
+  --bg: #ffffff;
+}
+
+/* Dark theme overrides */
+[data-theme="dark"] {
+  --accent: #7c78f0;
+  --accent-hover: #6965db;
+  --text: #e4e4e8;
+  --text-light: #a0a0ab;
+  --text-muted: #6e6e7a;
+  --border: #35353d;
+  --surface: #1e1e24;
+  --bg: #121212;
+}
+
+/* System preference fallback */
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --accent: #7c78f0;
+    --accent-hover: #6965db;
+    --text: #e4e4e8;
+    --text-light: #a0a0ab;
+    --text-muted: #6e6e7a;
+    --border: #35353d;
+    --surface: #1e1e24;
+    --bg: #121212;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input {
+  font-family: inherit;
+}

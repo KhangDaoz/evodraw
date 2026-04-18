@@ -1,4 +1,4 @@
-import { markRoomActivity } from './room.activity.js';
+import { markRoomActivity } from '../utils/roomActivity.js';
 
 // In-memory: roomId -> Map<shareId, { socketId, username }>
 const activeShares = new Map();

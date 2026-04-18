@@ -1,5 +1,5 @@
 import { getBucket } from '../config/firebase.js';
-import { getDB } from '../config/db.js';
+import File from '../models/File.js';
 import { randomUUID } from 'crypto';
 
 /**
@@ -50,18 +50,13 @@ export async function uploadFile(req, res, next) {
         const url = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
 
         // Save metadata to MongoDB
-        const db = getDB();
-        const fileDoc = {
+        await File.create({
             fileId,
             roomId: roomId.toUpperCase(),
-            originalName: file.originalname,
-            mimetype: file.mimetype,
+            mimeType: file.mimetype,
             size: file.size,
-            storagePath,
-            url,
-            createdAt: new Date(),
-        };
-        await db.collection('files').insertOne(fileDoc);
+            dataURL: url,
+        });
 
         return res.status(201).json({
             success: true,
@@ -83,17 +78,21 @@ export async function getFilesByRoom(req, res, next) {
             return res.status(400).json({ success: false, error: 'Room ID is required.' });
         }
 
-        const db = getDB();
-        const files = await db
-            .collection('files')
-            .find(
-                { roomId: roomId.toUpperCase() },
-                { projection: { _id: 0, fileId: 1, url: 1, originalName: 1, mimetype: 1, size: 1, createdAt: 1 } },
-            )
-            .sort({ createdAt: -1 })
-            .toArray();
+        const files = await File
+            .find({ roomId: roomId.toUpperCase() })
+            .select('-_id fileId dataURL mimeType size created')
+            .sort({ created: -1 })
+            .lean();
 
-        return res.json({ success: true, data: files });
+        // format map properties back to 'url' because the client might expect it (or we can just leave it as is if client relies on 'url')
+        const formattedFiles = files.map(f => ({
+            ...f,
+            url: f.dataURL,
+            mimetype: f.mimeType,
+            createdAt: f.created,
+        }));
+
+        return res.json({ success: true, data: formattedFiles });
     } catch (err) {
         next(err);
     }

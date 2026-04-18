@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { connectDB } from './config/db.js';
+import { initFirebase } from './config/firebase.js';
 import { initializeSockets } from './sockets/index.js';
 import roomRoutes from './routes/room.routes.js';
 import fileRoutes from './routes/file.routes.js';
@@ -13,7 +14,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173")
 
 // --- App Initialization ---
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 const httpServer = createServer(app);
 
 // --- WebSocket Setup ---

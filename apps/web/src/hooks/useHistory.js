@@ -25,7 +25,7 @@ export default function useHistory(canvas, syncState) {
 
     const onAdded = ({ target }) => {
       // Ignore intermediate components of complex shapes that are still drawing
-      if (shouldIgnore() || target._evoDrawing) return
+      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare) return
       
       // Ensure target has an ID if another listener hasn't added it yet
       if (!target._evoId) {
@@ -40,7 +40,7 @@ export default function useHistory(canvas, syncState) {
     }
 
     const onRemoved = ({ target }) => {
-      if (shouldIgnore() || target._evoDrawing) return
+      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare) return
       saveState({
         type: 'remove',
         id: target._evoId,
@@ -49,7 +49,7 @@ export default function useHistory(canvas, syncState) {
     }
 
     const onModified = ({ target }) => {
-      if (shouldIgnore()) return
+      if (shouldIgnore() || target._evoScreenShare) return
       const prevState = dragState.current
       if (prevState) {
         saveState({
@@ -65,7 +65,7 @@ export default function useHistory(canvas, syncState) {
 
     // Capture state before modification begins to save the 'before' state
     const onBeforeModify = (e) => {
-      if (shouldIgnore() || isDragging.current || !e.target) return
+      if (shouldIgnore() || isDragging.current || !e.target || e.target._evoScreenShare) return
       isDragging.current = true
       dragState.current = { ...e.target.toJSON(['_evoId']), _evoId: e.target._evoId }
     }

@@ -1,4 +1,4 @@
-import { markRoomActivity } from './room.activity.js';
+import { markRoomActivity } from '../utils/roomActivity.js';
 
 export const registerChatHandlers = (io, socket) => {
     // Text Chat Message Header

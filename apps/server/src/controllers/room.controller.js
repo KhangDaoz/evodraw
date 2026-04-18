@@ -1,15 +1,6 @@
 import Room from '../models/Room.js';
-import crypto from 'crypto';
-
-// Utility to generate a 6-character uppercase alphanumeric code
-function generateRoomCode() {
-    return crypto.randomBytes(3).toString('hex').toUpperCase();
-}
-
-// Utility to generate a 4-digit PIN
-function generateRoomPasscode() {
-    return Math.floor(1000 + Math.random() * 9000).toString();
-}
+import bcrypt from 'bcrypt';
+import { generateRoomCode, generateRoomPassCode } from '../utils/codeGenerator.js';
 
 export async function createRoom(req, res) {
     try {
@@ -19,7 +10,7 @@ export async function createRoom(req, res) {
 
         // Ensure uniqueness (simple retry logic)
         while (!isUnique && attempts < 5) {
-            const existingRoom = await Room.findByCode(code);
+            const existingRoom = await Room.findOne({ code });
             if (!existingRoom) {
                 isUnique = true;
             } else {
@@ -32,20 +23,21 @@ export async function createRoom(req, res) {
             return res.status(500).json({ success: false, message: 'Failed to generate unique room code' });
         }
 
-        const passcode = generateRoomPasscode();
+        const passcode = generateRoomPassCode();
 
-        const newRoom = {
+        const hashedPasscode = await bcrypt.hash(passcode, 10);
+
+        const result = await Room.create({
             code: code,
-            passcode: passcode,
-        };
+            passcode: hashedPasscode,
+        });
 
-        const result = await Room.create(newRoom);
-        
         res.status(201).json({
             success: true,
             data: {
-                _id: result.insertedId,
-                ...newRoom
+                _id: result._id,
+                code: result.code,
+                passcode: passcode, // return the plain passcode, not the hash
             }
         });
     } catch (error) {
@@ -58,15 +50,20 @@ export async function joinRoom(req, res) {
     try {
         const { code, passcode } = req.body || {};
 
-        const room = await Room.verifyAccess(code, passcode);
+        const room = await Room.findOne({
+            code: code.toUpperCase(),
+        });
 
-        if (!room) {
+        if (!room || !await bcrypt.compare(passcode, room.passcode)) {
             return res.status(401).json({ success: false, message: 'Invalid room code or passcode.' });
         }
 
-        await Room.touch(code);
+        room.updatedAt = new Date();
+        await room.save();
 
-        const { passcode: _hash, ...safeRoom } = room;
+        const roomObj = room.toObject();
+        const { passcode: _hash, ...safeRoom } = roomObj;
+
         res.status(200).json({
             success: true,
             data: safeRoom,
@@ -77,4 +74,38 @@ export async function joinRoom(req, res) {
     }
 }
 
+export async function updateRoom(req, res) {
+    try {
+        const { code, passcode, roomVersion, elements, appState, status } = req.body || {};
 
+        const room = await Room.findOne({
+            code: code.toUpperCase(),
+        });
+
+        if (!room || !await bcrypt.compare(passcode, room.passcode)) {
+            return res.status(401).json({ success: false, message: 'Invalid room code or passcode.' });
+        }
+
+        if (roomVersion !== undefined && roomVersion > room.roomVersion)  {
+            room.roomVersion = roomVersion;
+            room.elements = elements || room.elements;
+            room.appState = appState || room.appState;
+            room.status = status || room.status;
+            await room.save();
+            res.status(200).json({
+                success: true,
+                message: 'Room updated successfully',
+            });
+        }
+
+        else {
+            return res.status(400).json({
+                success: false,
+                message: 'Room version is outdated. Please refresh to get the latest room.' 
+            });
+        }
+    } catch (error) {
+        console.error('Update room error:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+}

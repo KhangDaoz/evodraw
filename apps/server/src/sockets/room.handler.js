@@ -1,5 +1,6 @@
-import { markRoomActivity } from './room.activity.js';
+import { markRoomActivity } from '../utils/roomActivity.js';
 import Room from '../models/Room.js';
+import bcrypt from 'bcrypt';
 
 // roomId -> Map<socketId, username>
 const roomMembers = new Map();
@@ -26,8 +27,8 @@ export const registerRoomHandlers = (io, socket) => {
         }
 
         try {
-            const room = await Room.verifyAccess(roomId, passcode);
-            if (!room) {
+            const room = await Room.findOne({ code: roomId.toUpperCase() });
+            if (!room || !await bcrypt.compare(passcode, room.passcode)) {
                 socket.emit('room_error', { message: 'Invalid room code or passcode.' });
                 return;
             }

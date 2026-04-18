@@ -3,12 +3,8 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-
-// Configuration & Handlers
 import { connectDB } from './config/db.js';
 import { initializeSockets } from './sockets/index.js';
-
-// Routes
 import roomRoutes from './routes/room.routes.js';
 
 // --- App Initialization ---

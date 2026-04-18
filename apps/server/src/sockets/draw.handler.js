@@ -1,4 +1,4 @@
-import { markRoomActivity } from './room.activity.js';
+import { markRoomActivity } from '../utils/roomActivity.js';
 
 // In-memory store for room background colors
 const roomBgColors = new Map();

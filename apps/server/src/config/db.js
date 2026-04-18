@@ -1,35 +1,19 @@
-import { MongoClient } from 'mongodb';
+import mongoose from 'mongoose';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/evodraw';
-const client = new MongoClient(uri);
-
-let db;
 
 export async function connectDB() {
     try {
-        await client.connect();
-        db = client.db();
-        console.log('Successfully connected to MongoDB');
+        if (mongoose.connection.readyState === 1) {
+            return mongoose.connection;
+        }
 
-        // Ensure TTL index for automatic room expiration (24 hours = 86400 seconds)
-        await db.collection('rooms').createIndex(
-            { "updatedAt": 1 },
-            { expireAfterSeconds: 86400 }
-        );
-        console.log('TTL Index verified on rooms.updatedAt');
+        await mongoose.connect(uri);
+        console.log(`MongoDB connected: ${mongoose.connection.host}`);
 
-        return db;
+        return mongoose.connection;
     } catch (error) {
-        console.error('Error connecting to MongoDB:', error);
+        console.error('Error connecting to MongoDB:', error.message);
         process.exit(1);
     }
 }
-
-export function getDB() {
-    if (!db) {
-        throw new Error('Database not initialized. Call connectDB first.');
-    }
-    return db;
-}
-
-export const clientInstance = client;

@@ -22,8 +22,9 @@ function getSharerColor(username) {
 
 /**
  * Create a Fabric.js Rect with a custom _render override that draws
- * live video frames directly. This bypasses Fabric v7's Image caching
- * which doesn't properly handle dynamic canvas/video sources.
+ * live video frames via an off-screen canvas buffer. This avoids
+ * Fabric v7's Image caching issues with dynamic video sources and
+ * keeps the hot path as cheap as possible.
  *
  * @param {HTMLVideoElement} videoEl - The video element with the screen share stream
  * @param {string} shareId - Unique share identifier
@@ -39,12 +40,22 @@ export function createScreenShareImage(videoEl, shareId, username, canvas) {
 
   console.log(`[ScreenShare] Creating video object: ${videoW}x${videoH} for ${username}`)
 
+  // Create an off-screen canvas that acts as a frame buffer.
+  // We draw the video onto this buffer in the render loop and then
+  // the Fabric _render override just blits this pre-drawn buffer,
+  // which is much cheaper than drawing the video element directly
+  // inside Fabric's render pipeline.
+  const bufferCanvas = document.createElement('canvas')
+  bufferCanvas.width = videoW
+  bufferCanvas.height = videoH
+  const bufferCtx = bufferCanvas.getContext('2d', { alpha: false })
+
   const rect = new fabric.Rect({
     left: 100,
     top: 100,
     width: videoW,
     height: videoH,
-    fill: 'transparent',
+    fill: '#000',
     originX: 'left',
     originY: 'top',
     selectable: true,
@@ -62,22 +73,19 @@ export function createScreenShareImage(videoEl, shareId, username, canvas) {
     lockRotation: true,
     hasRotatingPoint: false,
     objectCaching: false,
-    // Transparent stroke — the border is handled by Fabric controls
     stroke: color,
     strokeWidth: 2,
   })
 
-  // Override _render to draw video frames directly onto the Fabric canvas context
-  // This completely bypasses Fabric's Image/texture caching
+  // Stash references on the object for the render loop
   rect._videoEl = videoEl
-  const originalRender = rect._render.bind(rect)
+  rect._bufferCanvas = bufferCanvas
+  rect._bufferCtx = bufferCtx
+
+  // Override _render to blit the pre-drawn buffer canvas
   rect._render = function (ctx) {
-    // Draw the video frame directly
-    if (this._videoEl && this._videoEl.readyState >= this._videoEl.HAVE_CURRENT_DATA) {
-      ctx.drawImage(this._videoEl, -this.width / 2, -this.height / 2, this.width, this.height)
-    } else {
-      // Fallback: draw a placeholder rectangle
-      originalRender(ctx)
+    if (this._bufferCanvas) {
+      ctx.drawImage(this._bufferCanvas, -this.width / 2, -this.height / 2, this.width, this.height)
     }
   }
 
@@ -107,8 +115,16 @@ export function createScreenShareImage(videoEl, shareId, username, canvas) {
 }
 
 /**
- * Start a render loop that triggers canvas re-renders at the target FPS
- * so the custom _render override draws fresh video frames.
+ * Start a render loop that copies video frames into an off-screen buffer
+ * and then requests a Fabric re-render. The buffer copy is done outside
+ * of Fabric's pipeline so it doesn't block other canvas interactions.
+ *
+ * Optimizations applied:
+ * - Off-screen buffer: video → buffer is a simple blit, independent of canvas size
+ * - requestRenderAll instead of renderAll: deduplicates multiple render calls
+ *   to a single paint at the browser's next animation frame
+ * - Frame throttling: only copies a new frame when enough time has elapsed
+ * - No per-frame logging
  *
  * @param {fabric.Canvas} canvas - The Fabric canvas instance
  * @param {fabric.Object} fabricObj - The fabric object with custom _render
@@ -120,26 +136,37 @@ export function startFrameLoop(canvas, fabricObj, videoEl, shareId) {
   stopFrameLoop(shareId)
 
   let lastTime = 0
-  let frameCount = 0
   const TARGET_FPS = 24
   const FRAME_INTERVAL = 1000 / TARGET_FPS
 
+  const bufferCtx = fabricObj._bufferCtx
+  const bufferCanvas = fabricObj._bufferCanvas
+
   function render(now) {
-    if (!canvas || !fabricObj || !fabricObj.canvas) {
-      console.warn('[ScreenShare] Render loop stopped — object detached from canvas')
+    // Bail if the Fabric object was removed from the canvas
+    if (!fabricObj.canvas) {
       renderLoops.delete(shareId)
       return
     }
 
-    if (now - lastTime >= FRAME_INTERVAL) {
+    const elapsed = now - lastTime
+    if (elapsed >= FRAME_INTERVAL) {
       if (videoEl.readyState >= videoEl.HAVE_CURRENT_DATA) {
-        canvas.renderAll()
-        frameCount++
-        if (frameCount % 72 === 1) {
-          console.log(`[ScreenShare] Render loop active, frame #${frameCount}`)
+        // Resize buffer if video resolution changed dynamically
+        if (bufferCanvas.width !== videoEl.videoWidth || bufferCanvas.height !== videoEl.videoHeight) {
+          bufferCanvas.width = videoEl.videoWidth
+          bufferCanvas.height = videoEl.videoHeight
         }
+
+        // Copy the current video frame into the off-screen buffer
+        bufferCtx.drawImage(videoEl, 0, 0, bufferCanvas.width, bufferCanvas.height)
+
+        // Mark the object dirty and request (not force) a re-render.
+        // requestRenderAll coalesces multiple calls into one paint.
+        fabricObj.dirty = true
+        canvas.requestRenderAll()
       }
-      lastTime = now
+      lastTime = now - (elapsed % FRAME_INTERVAL)
     }
 
     const frameId = requestAnimationFrame(render)
@@ -167,7 +194,7 @@ export function stopFrameLoop(shareId) {
  * Stop all active render loops (cleanup on unmount).
  */
 export function stopAllFrameLoops() {
-  for (const [shareId, frameId] of renderLoops.entries()) {
+  for (const [, frameId] of renderLoops.entries()) {
     cancelAnimationFrame(frameId)
   }
   renderLoops.clear()

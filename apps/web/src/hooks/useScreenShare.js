@@ -57,8 +57,59 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     videoElementsRef.current.delete(shareId)
   }, [fabricCanvas])
 
+  // Build video constraints from resolution and fps options
+  const buildVideoConstraints = useCallback((res, fps) => {
+    let constraints = { cursor: 'always' }
+    if (res === '720p') {
+      constraints.width = { ideal: 1280, max: 1280 }
+      constraints.height = { ideal: 720, max: 720 }
+    } else if (res === '1080p') {
+      constraints.width = { ideal: 1920, max: 1920 }
+      constraints.height = { ideal: 1080, max: 1080 }
+    } else if (res === '4k') {
+      constraints.width = { ideal: 3840, max: 3840 }
+      constraints.height = { ideal: 2160, max: 2160 }
+    }
+    if (fps) {
+      constraints.frameRate = { ideal: fps, max: fps }
+    }
+    return constraints
+  }, [])
+
+  // Change resolution of active share
+  const changeResolution = useCallback(async (newRes) => {
+    if (!localStreamRef.current) return
+    const track = localStreamRef.current.getVideoTracks()[0]
+    if (!track) return
+
+    const settings = track.getSettings()
+    const currentFps = settings.frameRate || 30
+    const constraints = buildVideoConstraints(newRes, currentFps)
+
+    try {
+      await track.applyConstraints(constraints)
+      console.log(`[ScreenShare] Resolution changed to ${newRes}`)
+    } catch (err) {
+      console.error('[ScreenShare] Failed to apply resolution constraints', err)
+    }
+  }, [buildVideoConstraints])
+
+  // Change frame rate of active share
+  const changeFrameRate = useCallback(async (newFps) => {
+    if (!localStreamRef.current) return
+    const track = localStreamRef.current.getVideoTracks()[0]
+    if (!track) return
+
+    try {
+      await track.applyConstraints({ frameRate: { ideal: newFps, max: newFps } })
+      console.log(`[ScreenShare] Frame rate changed to ${newFps} fps`)
+    } catch (err) {
+      console.error('[ScreenShare] Failed to apply frame rate constraints', err)
+    }
+  }, [])
+
   // Start sharing my screen
-  const startSharing = useCallback(async () => {
+  const startSharing = useCallback(async (initialRes = '1080p', withAudio = false, initialFps = 30) => {
     if (isSharing) {
       console.log('[ScreenShare] Already sharing, ignoring')
       return
@@ -70,9 +121,11 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     console.log('[ScreenShare] Starting screen share...')
 
     try {
+      const videoConstraints = buildVideoConstraints(initialRes, initialFps)
+
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'always' },
-        audio: false,
+        video: videoConstraints,
+        audio: withAudio,
       })
 
       const videoTrack = stream.getVideoTracks()[0]
@@ -81,15 +134,20 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
         return
       }
 
+      const audioTrack = stream.getAudioTracks()[0]
+
       localStreamRef.current = stream
       const shareId = generateShareId()
       shareIdRef.current = shareId
       setIsSharing(true)
 
-      // Add video track to all existing peer connections
+      // Add video and audio tracks to all existing peer connections
       Object.entries(peersRef.current).forEach(([socketId, pc]) => {
         try {
           pc.addTrack(videoTrack, stream)
+          if (audioTrack) {
+            pc.addTrack(audioTrack, stream)
+          }
           // Renegotiate
           pc.createOffer()
             .then(offer => pc.setLocalDescription(offer).then(() => offer))
@@ -157,13 +215,17 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop())
 
-      // Remove video track from all peer connections
+      // Remove screen tracks from all peer connections
       Object.entries(peersRef.current).forEach(([socketId, pc]) => {
-        const senders = pc.getSenders().filter(s => s.track?.kind === 'video')
+        const senders = pc.getSenders()
+        const tracksToRemove = localStreamRef.current.getTracks()
+
         senders.forEach(sender => {
-          try {
-            pc.removeTrack(sender)
-          } catch (e) { /* connection may be closed */ }
+          if (sender.track && tracksToRemove.includes(sender.track)) {
+            try {
+              pc.removeTrack(sender)
+            } catch (e) { /* connection may be closed */ }
+          }
         })
 
         // Renegotiate
@@ -368,17 +430,21 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     }
   }, [fabricCanvas, activeShares])
 
-  // Handle new peer connections: add local video track if sharing
+  // Handle new peer connections: add local screen tracks if sharing
   useEffect(() => {
     const handlePeerCreated = (e) => {
       const { pc } = e.detail
       if (!localStreamRef.current) return
 
       const videoTrack = localStreamRef.current.getVideoTracks()[0]
+      const audioTrack = localStreamRef.current.getAudioTracks()[0]
       if (!videoTrack) return
 
       try {
         pc.addTrack(videoTrack, localStreamRef.current)
+        if (audioTrack) {
+          pc.addTrack(audioTrack, localStreamRef.current)
+        }
       } catch (err) {
         console.error('[ScreenShare] Failed to add track to new peer', err)
       }
@@ -409,5 +475,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     activeShares,
     startSharing,
     stopSharing,
+    changeResolution,
+    changeFrameRate,
   }
 }

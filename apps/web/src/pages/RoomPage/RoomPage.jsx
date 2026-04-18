@@ -84,11 +84,37 @@ export default function RoomPage() {
   const peersRef = useRef({})
   const { isVoiceActive, toggleVoice, streams } = useVoiceChat(roomCode, username, peersRef)
 
+  const [screenResolution, setScreenResolution] = useState('1080p')
+  const [screenAudio, setScreenAudio] = useState(false)
+  const [screenFps, setScreenFps] = useState(30)
+  
   // Screen share — needs fabricCanvas from canvas ref
   const [fabricCanvas, setFabricCanvas] = useState(null)
-  const { isSharing, activeShares, startSharing, stopSharing } = useScreenShare(
+  const { isSharing, activeShares, startSharing, stopSharing, changeResolution, changeFrameRate } = useScreenShare(
     roomCode, username, isConnected, fabricCanvas, peersRef
   )
+
+  const handleScreenShareToggle = () => {
+    if (isSharing) {
+      stopSharing()
+    } else {
+      startSharing(screenResolution, screenAudio, screenFps)
+    }
+  }
+
+  const handleResolutionChange = (res) => {
+    setScreenResolution(res)
+    if (isSharing) {
+      changeResolution(res)
+    }
+  }
+
+  const handleFpsChange = (fps) => {
+    setScreenFps(fps)
+    if (isSharing) {
+      changeFrameRate(fps)
+    }
+  }
 
   // Keep fabricCanvas in sync when canvas ref mounts
   useEffect(() => {
@@ -235,7 +261,13 @@ export default function RoomPage() {
         onToggleVoice={toggleVoice}
         isScreenSharing={isSharing}
         activeShareCount={activeShares.size}
-        onToggleScreenShare={isSharing ? stopSharing : startSharing}
+        onToggleScreenShare={handleScreenShareToggle}
+        screenResolution={screenResolution}
+        onChangeResolution={handleResolutionChange}
+        screenAudio={screenAudio}
+        onToggleScreenAudio={() => setScreenAudio(!screenAudio)}
+        screenFps={screenFps}
+        onChangeFps={handleFpsChange}
       />
 
       {/* Status bar */}

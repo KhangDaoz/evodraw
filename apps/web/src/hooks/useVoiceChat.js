@@ -36,7 +36,11 @@ export default function useVoiceChat(roomId, currentUsername, peersRef) {
     }
     setStreams(prev => {
       const newStreams = { ...prev };
-      delete newStreams[socketId];
+      for (const key of Object.keys(newStreams)) {
+        if (key === socketId || key.startsWith(`${socketId}_`)) {
+          delete newStreams[key];
+        }
+      }
       return newStreams;
     });
     delete iceCandidateQueues.current[socketId];
@@ -177,7 +181,7 @@ export default function useVoiceChat(roomId, currentUsername, peersRef) {
       if (track.kind === 'audio') {
         setStreams(prev => ({
           ...prev,
-          [targetSocketId]: stream
+          [`${targetSocketId}_${stream.id}`]: stream
         }));
       }
 

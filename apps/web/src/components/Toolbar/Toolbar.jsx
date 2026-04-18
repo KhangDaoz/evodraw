@@ -123,10 +123,17 @@ export default function Toolbar({
   onToggleVoice,
   isScreenSharing,
   activeShareCount = 0,
-  onToggleScreenShare
+  onToggleScreenShare,
+  screenResolution = '1080p',
+  onChangeResolution,
+  screenAudio = false,
+  onToggleScreenAudio,
+  screenFps = 30,
+  onChangeFps
 }) {
   const [showOptions, setShowOptions] = useState(false)
   const [showShapeOptions, setShowShapeOptions] = useState(false)
+  const [showScreenOptions, setShowScreenOptions] = useState(false)
   const [lastUsedShape, setLastUsedShape] = useState('rectangle')
 
   const isShapeActive = shapeTools.some(t => t.id === activeTool)
@@ -151,6 +158,7 @@ export default function Toolbar({
             onToolSelect('select')
             setShowShapeOptions(false)
             setShowOptions(false)
+            setShowScreenOptions(false)
           }}
           title="Select"
         >
@@ -166,13 +174,16 @@ export default function Toolbar({
               if (activeTool !== 'pen') {
                 onToolSelect('pen')
                 setShowShapeOptions(false)
+                setShowScreenOptions(false)
               } else {
                 setShowOptions(!showOptions)
+                if (!showOptions) setShowScreenOptions(false)
               }
             }}
             onDoubleClick={(e) => {
               e.stopPropagation()
               setShowOptions(!showOptions)
+              if (!showOptions) setShowScreenOptions(false)
             }}
             title="Pen (Click again for options)"
           >
@@ -302,6 +313,7 @@ export default function Toolbar({
             onToolSelect('eraser')
             setShowShapeOptions(false)
             setShowOptions(false)
+            setShowScreenOptions(false)
           }}
           title="Eraser"
         >
@@ -316,6 +328,7 @@ export default function Toolbar({
             onToolSelect('text')
             setShowShapeOptions(false)
             setShowOptions(false)
+            setShowScreenOptions(false)
           }}
           title="Text"
         >
@@ -333,10 +346,12 @@ export default function Toolbar({
               }
               setShowShapeOptions(!showShapeOptions)
               setShowOptions(false)
+              setShowScreenOptions(false)
             }}
             onDoubleClick={(e) => {
               e.stopPropagation()
               setShowShapeOptions(!showShapeOptions)
+              if (!showShapeOptions) setShowScreenOptions(false)
             }}
             title="Shapes"
           >
@@ -434,33 +449,120 @@ export default function Toolbar({
 
         {/* Screen Share Toggle */}
         {onToggleScreenShare && (
-          <button
-            className={`tool-btn ${isScreenSharing ? 'active screen-active' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleScreenShare()
-            }}
-            title={isScreenSharing ? "Stop Screen Share" : "Share Screen"}
-            style={{ position: 'relative' }}
-          >
-            {isScreenSharing ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                <line x1="8" y1="21" x2="16" y2="21"></line>
-                <line x1="12" y1="17" x2="12" y2="21"></line>
-                <line x1="2" y1="3" x2="22" y2="17" stroke="currentColor" strokeWidth="2.5"></line>
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                <line x1="8" y1="21" x2="16" y2="21"></line>
-                <line x1="12" y1="17" x2="12" y2="21"></line>
-              </svg>
+          <div style={{ position: 'relative' }}>
+            <button
+              className={`tool-btn ${isScreenSharing ? 'active screen-active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleScreenShare()
+                setShowOptions(false)
+                setShowShapeOptions(false)
+                setShowScreenOptions(false)
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setShowScreenOptions(!showScreenOptions)
+                setShowOptions(false)
+                setShowShapeOptions(false)
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation()
+                setShowScreenOptions(!showScreenOptions)
+                setShowOptions(false)
+                setShowShapeOptions(false)
+              }}
+              title={isScreenSharing ? "Stop Screen Share (Right-click for options)" : "Share Screen (Right-click for options)"}
+              style={{ position: 'relative' }}
+            >
+              {isScreenSharing ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                  <line x1="2" y1="3" x2="22" y2="17" stroke="currentColor" strokeWidth="2.5"></line>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+              )}
+              {activeShareCount > 0 && !isScreenSharing && (
+                <span className="screen-share-badge">{activeShareCount}</span>
+              )}
+            </button>
+
+            {/* Screen Share Options Popup */}
+            {showScreenOptions && (
+              <div className="tool-options animate-fade-in" style={{
+                position: 'absolute',
+                left: '100%',
+                bottom: 0,
+                marginLeft: '8px',
+                transform: 'none'
+              }}>
+                <div className="option-group">
+                  <label>Resolution</label>
+                  <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
+                    <button 
+                      className={`stroke-style-btn ${screenResolution === '720p' ? 'active' : ''}`}
+                      onClick={() => onChangeResolution && onChangeResolution('720p')}
+                      style={{ padding: '6px 12px', textAlign: 'left', borderRadius: '4px' }}
+                    >720p HD</button>
+                    <button 
+                      className={`stroke-style-btn ${screenResolution === '1080p' ? 'active' : ''}`}
+                      onClick={() => onChangeResolution && onChangeResolution('1080p')}
+                      style={{ padding: '6px 12px', textAlign: 'left', borderRadius: '4px' }}
+                    >1080p FHD</button>
+                    <button 
+                      className={`stroke-style-btn ${screenResolution === '4k' ? 'active' : ''}`}
+                      onClick={() => onChangeResolution && onChangeResolution('4k')}
+                      style={{ padding: '6px 12px', textAlign: 'left', borderRadius: '4px' }}
+                    >4K UHD</button>
+                  </div>
+                </div>
+                {/* FPS Selection */}
+                {onChangeFps && (
+                  <div className="option-group" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e0e0e0' }}>
+                    <label>Frame Rate</label>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <button 
+                        className={`stroke-style-btn ${screenFps === 15 ? 'active' : ''}`}
+                        onClick={() => onChangeFps(15)}
+                        style={{ padding: '6px 10px', borderRadius: '4px', flex: 1 }}
+                      >15</button>
+                      <button 
+                        className={`stroke-style-btn ${screenFps === 30 ? 'active' : ''}`}
+                        onClick={() => onChangeFps(30)}
+                        style={{ padding: '6px 10px', borderRadius: '4px', flex: 1 }}
+                      >30</button>
+                      <button 
+                        className={`stroke-style-btn ${screenFps === 60 ? 'active' : ''}`}
+                        onClick={() => onChangeFps(60)}
+                        style={{ padding: '6px 10px', borderRadius: '4px', flex: 1 }}
+                      >60</button>
+                    </div>
+                  </div>
+                )}
+                {/* System Audio Toggle */}
+                {onToggleScreenAudio && (
+                  <div className="option-group" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e0e0e0' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
+                      <input 
+                        type="checkbox" 
+                        checked={screenAudio} 
+                        onChange={() => onToggleScreenAudio()} 
+                        style={{ cursor: 'pointer' }}
+                      />
+                      Share System Audio
+                    </label>
+                  </div>
+                )}
+              </div>
             )}
-            {activeShareCount > 0 && !isScreenSharing && (
-              <span className="screen-share-badge">{activeShareCount}</span>
-            )}
-          </button>
+          </div>
         )}
       </nav>
 

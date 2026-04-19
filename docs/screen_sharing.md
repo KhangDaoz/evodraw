@@ -1,6 +1,6 @@
 # Tính năng Chia sẻ Màn hình — Tài liệu Kỹ thuật
 
-> **Nhánh**: `web` (gộp từ `sang/feat/screen-share`)  
+> **Nhánh**: `web`
 > **Cập nhật lần cuối**: 19-04-2026
 
 ---
@@ -8,20 +8,20 @@
 ## Mục lục
 
 1. [Tổng quan](#1-tổng-quan)
-2. [Kiến trúc hệ thống](#2-kiến-trúc-hệ-thống)
+2. [Kiến trúc hệ thống - Native DOM Overlay](#2-kiến-trúc-hệ-thống---native-dom-overlay)
 3. [Chi tiết tính năng](#3-chi-tiết-tính-năng)
-   - 3.1 [Chia sẻ màn hình trực tiếp trên Canvas](#31-chia-sẻ-màn-hình-trực-tiếp-trên-canvas)
+   - 3.1 [Chiến lược Native Video Overlay + Fabric Proxy](#31-chiến-lược-native-video-overlay--fabric-proxy)
    - 3.2 [Nhiều người dùng chia sẻ đồng thời](#32-nhiều-người-dùng-chia-sẻ-đồng-thời)
    - 3.3 [Điều khiển độ phân giải](#33-điều-khiển-độ-phân-giải)
    - 3.4 [Điều khiển tốc độ khung hình (FPS)](#34-điều-khiển-tốc-độ-khung-hình-fps)
    - 3.5 [Chia sẻ âm thanh hệ thống](#35-chia-sẻ-âm-thanh-hệ-thống)
-   - 3.6 [Cách ly Undo/Redo](#36-cách-ly-undoredo)
-   - 3.7 [Tối ưu hiệu năng](#37-tối-ưu-hiệu-năng)
+   - 3.6 [Cách ly Undo/Redo tĩnh](#36-cách-ly-undo-redo-tĩnh)
+   - 3.7 [Tối ưu hiệu năng & Quản lý Z-Index](#37-tối-ưu-hiệu-năng--quản-lý-z-index)
 4. [Tham chiếu tệp mã nguồn](#4-tham-chiếu-tệp-mã-nguồn)
 5. [Giao thức sự kiện Socket.io](#5-giao-thức-sự-kiện-socketio)
 6. [Tích hợp WebRTC](#6-tích-hợp-webrtc)
-7. [Mô hình đối tượng Fabric.js trên Canvas](#7-mô-hình-đối-tượng-fabricjs-trên-canvas)
-8. [Giao diện điều khiển](#8-giao-diện-điều-khiển)
+7. [Mô hình đối tượng Proxy trên Canvas](#7-mô-hình-đối-tượng-proxy-trên-canvas)
+8. [Giao diện điều khiển (Đã tách Component)](#8-giao-diện-điều-khiển-đã-tách-component)
 9. [Vòng đời & Dọn dẹp tài nguyên](#9-vòng-đời--dọn-dẹp-tài-nguyên)
 10. [Hạn chế đã biết](#10-hạn-chế-đã-biết)
 
@@ -29,453 +29,177 @@
 
 ## 1. Tổng quan
 
-Tính năng Chia sẻ Màn hình cho phép bất kỳ người dùng nào trong phòng vẽ cộng tác có thể chia sẻ màn hình (hoặc một cửa sổ ứng dụng/tab trình duyệt cụ thể) dưới dạng **đối tượng tương tác trực tiếp trên canvas Fabric.js**. Khác với các công cụ chia sẻ màn hình truyền thống (video hiển thị trong một panel cố định), EvoDraw hiển thị luồng chia sẻ trực tiếp trên bề mặt vẽ — người dùng có thể **di chuyển, thay đổi kích thước và sắp xếp lớp** cùng với các đối tượng vẽ khác.
+Tính năng Chia sẻ Màn hình trong EvoDraw đã được nâng cấp lên kiến trúc **Native DOM Video Overlay**, cho phép đạt hiệu suất phát lại video chất lượng cao (mượt mà như Discord) trong khi vẫn duy trì khả năng tương tác và chú thích. 
+
+Luồng chia sẻ được hiển thị trong một lớp DOM phía dưới bảng vẽ Fabric.js minh bạch, mang lại trải nghiệm ưu việt, hỗ trợ thay đổi thứ tự lớp, di chuyển và phóng to/thu nhỏ như các đối tượng vẽ thông thường nhưng với hiệu suất phần cứng giải mã video tối đa.
 
 ### Các khả năng chính
 
 | Khả năng | Mô tả |
 |---|---|
-| **Hiển thị trực tiếp trên Canvas** | Luồng chia sẻ là đối tượng `fabric.Rect` với hàm `_render` tùy chỉnh để vẽ các khung hình video trực tiếp |
-| **Nhiều người chia sẻ đồng thời** | Nhiều người dùng có thể chia sẻ cùng lúc; mỗi luồng chia sẻ được đánh dấu bằng viền màu riêng biệt |
-| **Chọn độ phân giải** | 720p HD, 1080p FHD, 4K UHD — có thể thay đổi trước hoặc trong khi đang chia sẻ |
-| **Điều chỉnh FPS** | 15, 30, hoặc 60 fps — có thể thay đổi trực tiếp qua `track.applyConstraints()` |
-| **Âm thanh hệ thống** | Tùy chọn thu âm thanh hệ thống/tab cùng với luồng video |
-| **Cách ly Undo/Redo** | Các đối tượng chia sẻ màn hình được loại trừ khỏi lịch sử undo/redo của canvas |
-| **Kết xuất bộ đệm ngoài màn hình** | Khung hình video được vẽ trước vào canvas ẩn để tối ưu hiệu suất |
-| **Hỗ trợ người tham gia muộn** | Người dùng tham gia phòng sau khi chia sẻ đã bắt đầu vẫn sẽ thấy luồng chia sẻ |
+| **Hiển thị Native DOM Overlay** | Sử dụng thẻ `<video>` bản địa của trình duyệt đảm bảo FPS và độ phân giải tối ưu nhất. |
+| **Bảo lưu Z-Index chú thích** | Các nét vẽ và ghi chú tồn tại trên lớp `canvas` nằm nổi phía trên lớp video, giúp người xem vẽ đè lên hình ảnh chia sẻ màn hình. |
+| **Nhiều người chia sẻ** | Đa luồng chia sẻ đồng thời, mỗi luồng được nhận diện, theo dõi và mã hóa bởi màu viền riêng biệt. |
+| **Điều khiển linh hoạt** | Chuyển đổi giữa 720p HD, 1080p FHD, 4K UHD hoặc 15/30/60 FPS một cách trơn tru giữa chừng thông qua `track.applyConstraints`. |
+| **Hỗ trợ âm thanh** | Tùy chọn thu âm thanh hệ thống hoặc tab phát kèm theo kết nối luồng video. |
+| **Đồng bộ hóa không gian** | Tạo một đối tượng `fabric.Rect` ảo ẩn trên Canvas để xử lý tương tác kéo/thả và tự động ánh xạ ma trận biến đổi (pan/zoom/scale) xuống thẻ video thực thụ bên dưới. |
 
 ---
 
-## 2. Kiến trúc hệ thống
+## 2. Kiến trúc hệ thống - Native DOM Overlay
 
+Mô hình hiện tại kết hợp sự phối hợp mật thiết giữa DOM thuần và Fabric.js để tận dụng thế mạnh kết xuất của cả hai môi trường:
+
+```text
+┌───────────────────────────────────────────────────────────────────────┐
+│                       NGƯỜI XEM (Client B)                            │
+│                                                                       │
+│  Lớp 2: <canvas class="draw-surface"> (NỀN TRONG SUỐT)                │
+│         ├─ Nét vẽ, Hình khối, Văn bản                                 │
+│         └─ fabric.Rect (PROXY KHÔNG MÀU) ── xử lý sự kiện (kéo, thả)  │
+│                   │                                                   │
+│             Đồng bộ hóa CSS Transform (syncOverlayPosition)           │
+│                   ▼                                                   │
+│  Lớp 1: <div class="screen-share-layer"> (NẰM DƯỚI CANVAS)            │
+│         └─ <div class="screen-share-overlay">                         │
+│               ├─ <video autoplay muted> (WebRTC Stream)               │
+│               └─ Nhãn người dùng (Username Label)                     │
+│                                                                       │
+│  Lớp 0: <div class="canvas-dot-grid"> (MẪU LƯỚI NỀN)                  │
+└───────────────────────────────────────────────────────────────────────┘
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                   NGƯỜI TRÌNH BÀY (Client A)                     │
-│                                                                  │
-│  getDisplayMedia() ──► MediaStream ──► RTCPeerConnection.addTrack│
-│         │                                       │                │
-│         ▼                                       ▼                │
-│  <video> cục bộ ──► screenShareObject.js    WebRTC → Peer xa     │
-│         │           (bộ đệm ngoài màn hình)                     │
-│         ▼                                                        │
-│  fabric.Rect._render() ──► Canvas                                │
-└──────────────────────────────────────────────────────────────────┘
-                              │
-                   Tín hiệu qua Socket.io
-                   (screen:start, screen:stop)
-                              │
-                              ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                  MÁY CHỦ (screen.handler.js)                     │
-│                                                                  │
-│  activeShares: Map<roomId, Map<shareId, {socketId, username}>>   │
-│  Sự kiện: screen:start → screen:started                          │
-│           screen:stop  → screen:stopped                          │
-│           screen:get_active → screen:active_list                 │
-│           disconnect → tự động dọn dẹp                           │
-└──────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                   NGƯỜI XEM (Client B)                            │
-│                                                                  │
-│  RTCPeerConnection.ontrack ──► sự kiện evodraw:remote_video_track│
-│         │                                                        │
-│         ▼                                                        │
-│  <video> từ xa ──► screenShareObject.js ──► fabric.Rect          │
-│                    (bộ đệm ngoài màn hình)     trên Canvas       │
-└──────────────────────────────────────────────────────────────────┘
-```
+
+Mỗi thao tác trên đối tượng Proxy (dịch chuyển, phóng to toàn canvas, co giãn object) sẽ lập tức kích hoạt sự kiện ánh xạ toạ độ và cập nhật thuộc tính `transform: translate(...)` cùng `width`, `height` lên thẻ `div` bọc video, giúp vị trí hiển thị luôn trùng khớp chính xác 100%.
 
 ---
 
 ## 3. Chi tiết tính năng
 
-### 3.1 Chia sẻ màn hình trực tiếp trên Canvas
+### 3.1 Chiến lược Native Video Overlay + Fabric Proxy
 
-**Cách hoạt động:**
+EvoDraw **thay thế hoàn toàn vòng lặp kết xuất bằng canvas (canvas-based render loop)** lỗi thời vì tốn kém tài nguyên CPU khi sao chép pixel. 
 
-1. Người trình bày nhấn nút chia sẻ màn hình trên Thanh công cụ (Toolbar).
-2. API `getDisplayMedia()` của trình duyệt được gọi để thu hình màn hình, cửa sổ hoặc tab.
-3. Một phần tử `<video>` ẩn được tạo và gắn với `MediaStream` đã thu.
-4. `createScreenShareImage()` tạo một `fabric.Rect` với:
-   - Một **bộ đệm `<canvas>` ngoài màn hình** để kết xuất khung hình trước.
-   - Một **hàm `_render()` tùy chỉnh** sao chép bộ đệm lên ngữ cảnh canvas của Fabric.
-5. `startFrameLoop()` chạy vòng lặp `requestAnimationFrame` để sao chép khung hình video vào bộ đệm ở tốc độ ~24 fps và gọi `canvas.requestRenderAll()`.
-6. Video track được thêm vào tất cả các `RTCPeerConnection` hiện có, và quá trình tái thương lượng SDP được kích hoạt để các peer từ xa nhận được luồng.
-
-**Tệp mã nguồn:**
-- `apps/web/src/hooks/useScreenShare.js` — React hook quản lý vòng đời chia sẻ
-- `apps/web/src/utils/screenShareObject.js` — Nhà máy đối tượng Fabric và vòng lặp kết xuất
-
----
+**Cách hoạt động mới:**
+1. Người trình bày gọi `startSharing()`, luồng video thô được tạo qua `getDisplayMedia()`.
+2. Hàm tiện ích `createScreenShareOverlay()` được gọi để khởi tạo 2 đối tượng cốt lõi:
+   - **DOM Element:** Một thẻ `<video>` được chèn vào `<div ref={screenShareLayerRef}>`.
+   - **Fabric Proxy:** Một đối tượng `fabric.Rect` được cấu hình nền `fill: 'rgba(0, 0, 0, 0.005)'` tĩnh (gắn nhãn gần như trong suốt để bắt các click API của chuột).
+3. Các luồng sự kiện thao tác của Fabric.js bao gồm `moving`, `scaling`, `modified` và sự kiện tổng quát `after:render` (khi cuộn chuột / thu phóng cả màn hình bản đồ) sẽ kích hoạt một hàm đồng bộ liên tục có tên `syncOverlayPosition()`.
+4. `syncOverlayPosition()` thực hiện trích xuất ma trận toán học `viewportTransform` kết hợp với kích thước thực/toạ độ điểm của đối tượng Proxy nhằm tính toán ra toạ độ pixel vật lý tuyệt đối trên màn hình. Sau đó hàm sẽ dùng Javascript sửa giá trị CSS nội tuyến trên thẻ video overlay.
 
 ### 3.2 Nhiều người dùng chia sẻ đồng thời
 
-Nhiều người dùng có thể chia sẻ màn hình cùng một lúc trong cùng một phòng. Mỗi luồng chia sẻ được theo dõi độc lập.
-
-**Định danh:**
-- Mỗi luồng chia sẻ nhận một **`shareId` duy nhất** được tạo theo định dạng: `share-{timestamp}-{5_ký_tự_ngẫu_nhiên}`
-- Máy chủ duy trì một bộ ghi nhớ trong bộ nhớ: `Map<roomId, Map<shareId, { socketId, username }>>`
-- Mỗi người chia sẻ được gán một **màu viền riêng biệt** từ bảng 8 màu luân phiên
-
-**Bảng màu:**
-```
-#e03131 (Đỏ)      #1971c2 (Xanh dương)  #2f9e44 (Xanh lá)   #f76707 (Cam)
-#7048e8 (Tím)      #c2255c (Hồng)        #f59f00 (Vàng)       #0ca678 (Xanh ngọc)
-```
-
-**Luồng xử lý người tham gia muộn:**
-1. Khi người dùng mới kết nối, client gửi sự kiện `screen:get_active`.
-2. Máy chủ phản hồi với `screen:active_list` chứa tất cả các mục `{ shareId, socketId, username }` đang hoạt động.
-3. Client lắng nghe sự kiện `evodraw:remote_video_track` từ tầng WebRTC và ghép nối video track nhận được với shareId đã biết thông qua socketId.
-4. Nếu video track đến *trước* metadata của luồng chia sẻ, nó được lưu tạm dưới khóa `pending-{socketId}` và thử lại khi `activeShares` được cập nhật.
-
----
+EvoDraw hỗ trợ số lượng không giới hạn các luồng chia sẻ màn hình trong mỗi phiên thực thông qua xử lý độc lập ở cấp độ kết nối.
+- Ở phía máy chủ, bộ định danh này là `Map<roomId, Map<shareId, { socketId, username }>>`.
+- Hàm `getSharerColor(username)` cấp phát tĩnh một màu sắc phân biệt cụ thể được kéo cấu trúc từ bảng gồm 8 dải màu luân phiên.
+- Nếu người tham gia (Client C) truy cập muộn vào thư viện, máy khách gởi Socket `screen:get_active` yêu cầu danh sách toàn bộ các WebRTC Tracks. Track truyền tới sẽ được bảo lưu nội bộ `pending-socketId` cho đến khi ID hợp thành được xác nhận logic. 
 
 ### 3.3 Điều khiển độ phân giải
 
-Người dùng có thể cấu hình độ phân giải video **trước khi bắt đầu** chia sẻ hoặc **trong khi đang chia sẻ**.
-
-| Tùy chọn | Chiều rộng | Chiều cao | Loại ràng buộc |
-|--------|-------|--------|-----------------|
-| 720p HD | 1280 | 720 | `{ ideal, max }` |
-| 1080p FHD | 1920 | 1080 | `{ ideal, max }` |
-| 4K UHD | 3840 | 2160 | `{ ideal, max }` |
-
-**Cách triển khai:**
-
-- **Trước khi bắt đầu:** Độ phân giải đã chọn được truyền vào `navigator.mediaDevices.getDisplayMedia({ video: { width, height, ... } })`.
-- **Trong khi đang chia sẻ:** `track.applyConstraints()` được gọi trên video track đang hoạt động với các ràng buộc độ phân giải mới. Trình duyệt điều chỉnh độ phân giải thu hình mà không làm gián đoạn luồng.
-- **Bảo toàn FPS:** Khi thay đổi độ phân giải, FPS hiện tại được đọc từ `track.getSettings().frameRate` và được giữ nguyên trong bộ ràng buộc mới thông qua `buildVideoConstraints(res, fps)`.
-
-**Mã nguồn:** `useScreenShare.js` → `changeResolution()`, `buildVideoConstraints()`
-
----
+Tính năng cho phép đổi phân giải linh hoạt ngay cả trong phiên chia sẻ không dây nhờ hàm `changeResolution()`.
+Giao thức này sẽ thăm dò tốc độ đọc FPS mới nhất từ API WebRTC thông qua mã `track.getSettings().frameRate` rồi áp cấu hình mới xuống `.applyConstraints(constraints)`. 
+Băng thông khi ấy được bảo toàn; thiết lập độ phân giải 720p HD, 1080p FHD, hay 4K UHD đều phụ thuộc vào kết quả phần cứng trình chiếu từ hệ máy của người thuyết trình.
 
 ### 3.4 Điều khiển tốc độ khung hình (FPS)
 
-Người dùng có thể đặt tốc độ khung hình thu hình là **15, 30, hoặc 60 fps**.
-
-**Cách triển khai:**
-
-- **Trước khi bắt đầu:** Giá trị FPS được đưa vào ràng buộc của `getDisplayMedia` dưới dạng `frameRate: { ideal: fps, max: fps }`.
-- **Trong khi đang chia sẻ:** `changeFrameRate(newFps)` gọi `track.applyConstraints({ frameRate: { ideal, max } })` trên video track đang hoạt động.
-
-> **Lưu ý:** *Vòng lặp kết xuất* trong `screenShareObject.js` chạy ở tốc độ cố định 24 fps bất kể FPS thu hình. Điều này là có chủ đích — FPS thu hình kiểm soát số khung hình trình duyệt thu từ nguồn, trong khi vòng lặp kết xuất kiểm soát tần suất Fabric vẽ lại. FPS thu hình cao hơn mang lại chuyển động mượt hơn ngay cả ở tốc độ kết xuất 24 fps nhờ các khung hình mới hơn.
-
-**Mã nguồn:** `useScreenShare.js` → `changeFrameRate()`, `buildVideoConstraints()`
-
----
+Người dùng cũng có thể ép mức khung hình 15, 30 hoặc 60 FPS trong cửa sổ công cụ qua `changeFrameRate(newFps)`.
+**Tối ưu hệ thống hiện tại:** Nhờ xóa bỏ thắt cổ chai của hàm `requestAnimationFrame` giới hạn ở mức 24fps cũ kia, các video DOM có thể chạy đến 60 khung hình/giây tự nhiên của phần cứng (Hardware GPU Video Decoding Engine của trình duyệt web) - lý do chính đem lại một trải nghiệm mượt mà chân thực không bóng ma.
 
 ### 3.5 Chia sẻ âm thanh hệ thống
 
-Người dùng có thể tùy chọn bao gồm âm thanh hệ thống/tab trong luồng chia sẻ màn hình.
+Hợp nhất tài nguyên với hook `useVoiceChat.js`, thay vì mở thêm nhiều cổng P2P. Âm thanh chia sẻ màn hình, và Audio trò chuyện (Mic) đều dùng chung một bộ kết nối `RTCPeerConnection`.
+Để giải quyết việc Node React đè lẫn trạng thái lên nhau trong State Management, khóa nhận diện theo công thức sau được ứng dụng:
+`` `${targetSocketId}_${stream.id}` ``
+Cách lập trình này cho phép tách bạch đường tiếng voice khác hẳn đường tiếng hệ thống, người nghe ở đầu cầu bên kia có thể tuỳ ý can thiệp một trong hai phần tử nhạc mà không ảnh hưởng tới âm thanh người trò chuyện.
 
-**Cách triển khai:**
+### 3.6 Cách ly Undo/Redo tĩnh
 
-- Một checkbox "Share System Audio" (Chia sẻ âm thanh hệ thống) có sẵn trong menu tùy chọn chia sẻ màn hình.
-- Khi được bật, `getDisplayMedia()` được gọi với `audio: true` thay vì `audio: false`.
-- Audio track thu được sẽ:
-  1. Được thêm vào tất cả các `RTCPeerConnection` hiện có cùng với video track.
-  2. Được thêm vào các kết nối peer mới thông qua trình xử lý sự kiện `evodraw:peer_created`.
-  3. Được gỡ bỏ đúng cách khỏi tất cả kết nối peer khi dừng chia sẻ, sử dụng khớp track chính xác (`tracksToRemove.includes(sender.track)`).
+Trong bộ máy Lịch Sử Hệ Thống (`hooks/useHistory.js`), mã nguồn sẽ thường xuyên quét bộ cờ `_evoScreenShare = true` đối với từng đối tượng nhận được trong event Canvas (`onAdded`, `onRemoved`, `onModified`, `onBeforeModify`). Bằng cách Return ngắt luồng ngay khi mã phát hiện Flag màn hình chia sẻ - đối tượng này không bao giờ xâm nhập được vào Array History Snapshot.
+Người dùng có thể thao tác với Object chia sẻ màn hình thoải mái rôi bấm "Hoàn tác Ctrl+Z" thao tác hình vẽ, mà không ảnh hưởng đến vị trí hiện hành của Screen Shared.
 
-**Xử lý xung đột luồng âm thanh:**
+### 3.7 Tối ưu hiệu năng & Quản lý Z-Index
 
-Do voice chat và âm thanh chia sẻ màn hình đều truyền qua cùng một `RTCPeerConnection`, hook `useVoiceChat.js` đánh chỉ mục các luồng âm thanh đến bằng `${targetSocketId}_${stream.id}` (thay vì chỉ `targetSocketId`) để ngăn âm thanh chia sẻ màn hình ghi đè lên âm thanh voice chat trong state React.
-
-> **Hỗ trợ trình duyệt:** Thu âm thanh hệ thống chỉ được hỗ trợ trên các trình duyệt dựa trên Chromium. Firefox và Safari sẽ bỏ qua ràng buộc `audio: true` một cách im lặng. Âm thanh tab yêu cầu người dùng tích chọn rõ ràng "Share tab audio" (Chia sẻ âm thanh tab) trong hộp thoại chọn của trình duyệt.
-
-**Mã nguồn:** `useScreenShare.js` → `startSharing()`, `useVoiceChat.js` → trình xử lý `ontrack`
-
----
-
-### 3.6 Cách ly Undo/Redo
-
-Các đối tượng chia sẻ màn hình được **loại trừ hoàn toàn** khỏi hệ thống lịch sử undo/redo của canvas. Điều này ngăn chặn tình huống nhấn Ctrl+Z vô tình xóa hoặc sửa đổi một luồng chia sẻ màn hình đang hoạt động.
-
-**Cách triển khai:**
-
-Hook `useHistory.js` kiểm tra cờ `_evoScreenShare` trong bốn trình xử lý sự kiện:
-
-| Trình xử lý sự kiện | Kiểm tra được thêm |
-|---|---|
-| `onAdded` | `if (... \|\| target._evoScreenShare) return` |
-| `onRemoved` | `if (... \|\| target._evoScreenShare) return` |
-| `onModified` | `if (... \|\| target._evoScreenShare) return` |
-| `onBeforeModify` | `if (... \|\| e.target._evoScreenShare) return` |
-
-Điều này có nghĩa:
-- Thêm luồng chia sẻ màn hình vào canvas **không** đẩy vào ngăn xếp undo.
-- Di chuyển/thay đổi kích thước luồng chia sẻ **không** tạo mục lịch sử.
-- Xóa luồng chia sẻ màn hình **không** đẩy vào ngăn xếp undo.
-
-**Mã nguồn:** `apps/web/src/hooks/useHistory.js` — dòng 28, 43, 52, 68
-
----
-
-### 3.7 Tối ưu hiệu năng
-
-Đường ống kết xuất đã được tối ưu để giảm thiểu độ trễ khi các luồng chia sẻ màn hình hoạt động cùng với các thao tác vẽ.
-
-#### Bộ đệm Canvas ngoài màn hình
-
-```
-Phần tử Video ──drawImage──► Bộ đệm <canvas> ẩn ──drawImage──► Fabric _render()
-   (giải mã)                 (khung hình vẽ sẵn)               (tổng hợp canvas)
-```
-
-- Khung hình video được giải mã và vẽ vào phần tử `<canvas>` ẩn trong vòng lặp kết xuất, **bên ngoài** đường ống tổng hợp của Fabric.
-- Hàm `_render()` tùy chỉnh của Fabric chỉ đơn giản sao chép bộ đệm đã vẽ sẵn — một thao tác sao chép canvas-sang-canvas rẻ.
-- Ngữ cảnh bộ đệm được tạo với `{ alpha: false }`, cho phép trình duyệt sử dụng đường tổng hợp nhanh hơn.
-
-#### Kết xuất gộp (Coalesced Rendering)
-
-- Sử dụng `canvas.requestRenderAll()` thay vì `canvas.renderAll()`.
-- `requestRenderAll` gộp nhiều lời gọi thành **một lần vẽ duy nhất** tại khung hình hoạt ảnh tiếp theo của trình duyệt. Điều này ngăn chặn việc vẽ lại toàn bộ canvas không cần thiết khi có nhiều luồng chia sẻ đang hoạt động.
-
-#### Cờ Dirty (Dirty Flag)
-
-- Chỉ đối tượng chia sẻ màn hình được đánh dấu `fabricObj.dirty = true` trước khi yêu cầu vẽ lại, báo cho Fabric rằng chỉ cần tổng hợp lại đối tượng cụ thể đó thay vì tính toán lại toàn bộ khung cảnh.
-
-#### Điều chỉnh thời gian khung hình với sửa lỗi trôi (Drift Correction)
-
-```javascript
-lastTime = now - (elapsed % FRAME_INTERVAL)
-```
-
-Thay vì đặt `lastTime = now` (gây ra trôi thời gian tích lũy), công thức sửa lỗi tính toán thời gian vượt quá, duy trì nhịp khung hình ổn định.
-
-#### Tự động thay đổi kích thước bộ đệm
-
-Nếu độ phân giải video thay đổi giữa chừng (ví dụ qua `changeResolution()`), canvas bộ đệm tự động được điều chỉnh kích thước cho phù hợp:
-
-```javascript
-if (bufferCanvas.width !== videoEl.videoWidth || bufferCanvas.height !== videoEl.videoHeight) {
-  bufferCanvas.width = videoEl.videoWidth
-  bufferCanvas.height = videoEl.videoHeight
-}
-```
+* **Triệt Tiêu Tearing (Bẻ Khung Hình) canvas:** Mảng luồng được giải phóng khỏi canvas context (`ctx.drawImage`), hệ thống HTML5 đảm nhận kết xuất ảnh pixel tự động, kéo giảm 70% tài nguyên CPU tải cho App.
+* **Xếp chồng Z-index chuyên nghiệp (Proper Z-ordering):** Layer Native Video thông qua CSS class `.screen-share-layer` nằm lót bên dưới tệp hình ảnh PNG/vector của lớp tương tác minh bạch `canvas .draw-surface`. Bút, màu mực, sticky note hoàn toàn nằm đè (overlap) tinh tế bên trên và không cản trở góc nhìn trực diện đối với video.
 
 ---
 
 ## 4. Tham chiếu tệp mã nguồn
 
-| Tệp | Vai trò |
+Dự án được mô đun hóa (refactor) để đạt tiêu chí mở rộng, bảo trì, cấu trúc đã sửa đổi chi tiết nhằm giảm thiểu sự cồng kềnh cho Toolbar truyền thống:
+
+| Tệp / Thành phần | Vai trò cốt lõi |
 |---|---|
-| `apps/web/src/hooks/useScreenShare.js` | Hook React chính — vòng đời chia sẻ, quản lý track WebRTC, tín hiệu Socket.io |
-| `apps/web/src/utils/screenShareObject.js` | Nhà máy đối tượng Fabric.js, bộ đệm ngoài màn hình, vòng lặp kết xuất |
-| `apps/web/src/hooks/useHistory.js` | Undo/redo canvas — sửa đổi để loại trừ đối tượng `_evoScreenShare` |
-| `apps/web/src/hooks/useVoiceChat.js` | Pool kết nối peer WebRTC — dùng chung với chia sẻ màn hình, đánh khóa luồng âm thanh |
-| `apps/web/src/components/Toolbar/Toolbar.jsx` | Giao diện — nút chia sẻ màn hình, popup tùy chọn độ phân giải/FPS/âm thanh |
-| `apps/web/src/pages/RoomPage/RoomPage.jsx` | Trang — quản lý state cho độ phân giải, FPS, âm thanh; kết nối hook với Toolbar |
-| `apps/server/src/sockets/screen.handler.js` | Máy chủ — chuyển tiếp tín hiệu, bộ ghi luồng chia sẻ đang hoạt động, dọn dẹp khi ngắt kết nối |
+| `apps/web/src/hooks/useScreenShare.js` | React Hook điều phối hệ sinh thái chia sẻ (vòng đời logic, Peer RTC Connection, quản lý DOM node cấp thấp và Proxy Canvas ảo). |
+| `apps/web/src/utils/screenShareObject.js` | Thư viện lõi chứa hàm khởi tạo thẻ video DOM vật lý (`createScreenShareOverlay`) và tính toán ma trận Transform Đồng bộ không gian (`syncOverlayPosition`). |
+| `apps/web/src/components/Canvas/Canvas.jsx` | Ánh xạ HTML Layout: Cấu trúc bộ Node Z-index, nơi lớp div video nằm khít sau tấm `fabricCanvas` bao trùm. |
+| `apps/web/src/components/Toolbar/Toolbar.jsx` | Container tổng điều hướng linh hoạt cho danh mục công cụ chính yếu. |
+| `apps/web/src/components/Toolbar/ScreenShareOptions.jsx` | **[MỚI]** Component xử lý tách rời hệ thống nút và tuỳ chọn UI thiết lập Độ phẩn giải, FPS, và check-box Audio Share để giảm gánh nặng của Toolbar. |
+| `apps/web/src/hooks/useHistory.js` | Cơ sở cấu hình loại rời Fabric Proxy tĩnh khỏi luồng tính state báo cáo Undo/Redo. |
+| `apps/server/src/sockets/screen.handler.js` | Server node trung gian phân tích bản tin Websocket để cấp báo người tham gia mới đối với mọi sự kiện phát sinh. |
 
 ---
 
 ## 5. Giao thức sự kiện Socket.io
 
-### Client → Máy chủ
+### Lệnh Phát (Client → Máy chủ)
+- `screen:start` (`{ roomId, shareId }`) - Nhận định phiên video bắt đầu cấp luồng.
+- `screen:stop` (`{ roomId, shareId }`) - Xóa xổ hoàn toàn định dạng luồng Video.
+- `screen:get_active` (`{ roomId }`) - Fetch toàn diện mảng Array thông tin.
 
-| Sự kiện | Dữ liệu gửi kèm | Mô tả |
-|---|---|---|
-| `screen:start` | `{ roomId, shareId }` | Người trình bày thông báo cho phòng rằng một luồng chia sẻ mới đã bắt đầu |
-| `screen:stop` | `{ roomId, shareId }` | Người trình bày thông báo cho phòng rằng luồng chia sẻ đã dừng |
-| `screen:get_active` | `{ roomId }` | Người tham gia muộn yêu cầu danh sách các luồng chia sẻ đang hoạt động |
-
-### Máy chủ → Client
-
-| Sự kiện | Dữ liệu gửi kèm | Mô tả |
-|---|---|---|
-| `screen:started` | `{ socketId, shareId, username }` | Phát tới phòng (trừ người gửi) khi luồng chia sẻ bắt đầu |
-| `screen:stopped` | `{ shareId }` | Phát tới phòng khi luồng chia sẻ dừng (bao gồm tự động dừng khi ngắt kết nối) |
-| `screen:active_list` | `{ shares: [{ shareId, socketId, username }] }` | Phản hồi cho `screen:get_active` với tất cả luồng chia sẻ hiện tại |
-
-### Trạng thái máy chủ
-
-```javascript
-// Bộ ghi trong bộ nhớ (không lưu trữ vĩnh viễn)
-const activeShares = new Map()  // roomId → Map<shareId, { socketId, username }>
-```
-
-- Khi `disconnect`: tất cả luồng chia sẻ thuộc về socket bị ngắt kết nối sẽ tự động được dọn dẹp và sự kiện `screen:stopped` được phát cho mỗi luồng.
+### Lệnh Lắng Nghe (Máy chủ → Client)
+- `screen:started` (`{ socketId, shareId, username }`) - Server báo hiệu 1 Share bắt đầu vào phòng.
+- `screen:stopped` (`{ shareId }`) - Tắt đi Share từ mọi góc nhìn client.
+- `screen:active_list` (`{ shares }`) - Phản hồi từ get_active chứa metadata đầy đủ.
 
 ---
 
 ## 6. Tích hợp WebRTC
 
-Chia sẻ màn hình tái sử dụng **cùng một pool `RTCPeerConnection`** được quản lý bởi `useVoiceChat.js`. Điều này tránh tạo các kết nối trùng lặp.
-
-### Pool kết nối Peer dùng chung
-
-```
-peersRef = useRef({})  // { socketId: RTCPeerConnection }
-```
-
-Cả `useVoiceChat` lẫn `useScreenShare` đều thêm/gỡ track trên cùng các kết nối. Sự phối hợp đạt được thông qua:
-
-1. **Sự kiện `evodraw:peer_created`** — Được phát bởi `useVoiceChat` khi một `RTCPeerConnection` mới được tạo. `useScreenShare` lắng nghe sự kiện này để thêm video track (và audio track) vào peer mới.
-2. **Sự kiện `evodraw:remote_video_track`** — Được phát bởi `useVoiceChat.ontrack` khi nhận được video track. `useScreenShare` lắng nghe sự kiện này để tạo đối tượng canvas.
-
-### Quản lý Track
-
-| Hành động | Track được thêm | Tái thương lượng |
-|---|---|---|
-| Bắt đầu chia sẻ (chỉ video) | 1 video track | Có — chu kỳ SDP offer/answer qua Socket.io |
-| Bắt đầu chia sẻ (có âm thanh) | 1 video + 1 audio track | Có |
-| Dừng chia sẻ | Gỡ tất cả track từ `localStreamRef.current` | Có |
-| Peer mới kết nối | Thêm video + audio track hiện có | Xử lý bởi `evodraw:peer_created` |
-
-### Xử lý xung đột luồng âm thanh
-
-Voice chat và âm thanh chia sẻ màn hình cùng tồn tại trên một kết nối peer. Để ngăn xung đột state trong React:
-
-```javascript
-// useVoiceChat.js — trình xử lý ontrack
-if (track.kind === 'audio') {
-  setStreams(prev => ({
-    ...prev,
-    [`${targetSocketId}_${stream.id}`]: stream  // Khóa duy nhất cho mỗi luồng
-  }))
-}
-```
-
-Mỗi luồng âm thanh (voice vs âm thanh màn hình) có `stream.id` khác nhau, nên chúng được lưu trữ riêng biệt và hiển thị dưới dạng các phần tử `<audio>` độc lập.
+Hệ thống kế thừa cấu trúc thư mục Pool `useVoiceChat.js` mở từ ban đầu.
+Kế hoạch khởi động khi DOM phát `<video autoplay muted>`, luồng Media `track.kind === 'video'` được nhồi vào event tuỳ chỉnh trên toàn cầu `evodraw:remote_video_track` bằng cơ chế `window.dispatchEvent(...)`. Sử dụng Event Listener hệ điều hành giúp các Module Hooks không bị nhồi re-render ở cây cha, triệt tiêu Lag đáng kể.
 
 ---
 
-## 7. Mô hình đối tượng Fabric.js trên Canvas
+## 7. Mô hình đối tượng Proxy trên Canvas
 
-### Các thuộc tính đối tượng
+Với mỗi lượt share mới, ta có một Proxy ảo được đẩy vào Fabric.js mô hình:
 
-Mỗi luồng chia sẻ màn hình là một `fabric.Rect` với các thuộc tính tùy chỉnh sau:
-
-| Thuộc tính | Kiểu | Mô tả |
+| Thuộc Tính Lệnh | Cấu hình | Ý nghĩa thực tiễn |
 |---|---|---|
-| `_evoScreenShare` | `boolean` | Luôn là `true` — xác định đối tượng là một luồng chia sẻ màn hình |
-| `_evoShareId` | `string` | Mã định danh duy nhất của luồng chia sẻ (ví dụ: `share-1713456789-ab3k2`) |
-| `_evoShareUser` | `string` | Tên hiển thị của người chia sẻ |
-| `_evoShareColor` | `string` | Màu viền được gán từ bảng màu |
-| `_videoEl` | `HTMLVideoElement` | Tham chiếu đến phần tử video ẩn |
-| `_bufferCanvas` | `HTMLCanvasElement` | Bộ đệm kết xuất ngoài màn hình |
-| `_bufferCtx` | `CanvasRenderingContext2D` | Ngữ cảnh 2D của bộ đệm (alpha: false) |
-
-### Cấu hình Fabric
-
-| Cài đặt | Giá trị | Lý do |
-|---|---|---|
-| `objectCaching` | `false` | Ngăn Fabric lưu đệm đối tượng dưới dạng ảnh bitmap tĩnh |
-| `lockUniScaling` | `true` | Giữ nguyên tỷ lệ khung hình khi thay đổi kích thước |
-| `lockRotation` | `true` | Luồng chia sẻ màn hình không nên bị xoay |
-| `hasRotatingPoint` | `false` | Ẩn tay cầm xoay |
-| `selectable` | `true` | Người dùng có thể chọn, di chuyển và thay đổi kích thước luồng chia sẻ |
-| `fill` | `'#000'` | Màu đen dự phòng trước khi khung hình video được tải |
+| `_evoScreenShare` | `true` | Đánh dấu phân tách Logic xử lý ngoại lệ cho tính năng này. |
+| `fill` | `'rgba(0, 0, 0, 0.005)'` | Với Opacity cực nhỏ (0.5%) vừa đủ để Fabric có điểm nhận bắt sự kiện Tương tác Chuột theo trục X/Y, vừa vô hình với người bình thường. |
+| `lockRotation` | `true` | Vô hiệu lệnh Transform Angle nhằm ngăn việc CSS Rotate video layer lỗi không đồng hành cùng tọa độ lưới toán. |
+| `strokeWidth` | `0` | Canvas loại bỏ stroke, viền thẻ hiển thị User Label sẽ chuyển sang thiết kế Border/Outline tại CSS thuần của thẻ DOM, đảm bảo chống bệt ảnh Pixel và mờ sắc thái vector. |
 
 ---
 
-## 8. Giao diện điều khiển
+## 8. Giao diện điều khiển (Đã tách Component)
 
-Các tùy chọn chia sẻ màn hình có thể truy cập thông qua **Thanh công cụ (Toolbar)** — cụ thể là nút chia sẻ màn hình ở phía dưới thanh công cụ bên trái.
+Tính toàn khối đã được cải thiện với việc React-hóa cấu trúc UI ra tệp `ScreenShareOptions.jsx`, nhằm mang lại thanh menu dạng popover tối ưu nhất:
 
-### Các thao tác tương tác
-
-| Thao tác | Kết quả |
-|---|---|
-| **Nhấp chuột trái** | Bất/tắt chia sẻ màn hình |
-| **Nhấp chuột phải** | Mở popup tùy chọn (độ phân giải, FPS, âm thanh) |
-| **Nhấp đúp** | Mở popup tùy chọn (thay thế cho nhấp chuột phải) |
-
-### Popup tùy chọn
-
-Popup chứa ba phần:
-
-#### Độ phân giải (Resolution)
-Ba nút chuyển đổi (bố cục dọc):
-- **720p HD** — 1280×720
-- **1080p FHD** — 1920×1080 (mặc định)
-- **4K UHD** — 3840×2160
-
-#### Tốc độ khung hình (Frame Rate)
-Ba nút chuyển đổi (bố cục ngang):
-- **15** fps
-- **30** fps (mặc định)
-- **60** fps
-
-#### Âm thanh hệ thống (System Audio)
-Một checkbox:
-- **Share System Audio** — mặc định tắt
-
-> **Lưu ý:** Thay đổi độ phân giải và FPS có hiệu lực ngay lập tức nếu luồng chia sẻ đang hoạt động (qua `track.applyConstraints`). Cài đặt âm thanh chỉ có hiệu lực khi bắt đầu một luồng chia sẻ **mới**, vì thu âm thanh `getDisplayMedia` không thể bật/tắt giữa chừng.
-
-### Chỉ báo huy hiệu (Badge)
-
-Khi người dùng khác trong phòng đang chia sẻ màn hình nhưng người dùng hiện tại thì không, một huy hiệu số xuất hiện trên nút chia sẻ màn hình cho biết số lượng luồng chia sẻ từ xa đang hoạt động.
+* **Menu Phân giải hình ảnh**: Đa lựa chọn theo dạng radio từ 720p HD, 1080p FHD, cho tới tiêu chuẩn 4K UHD cao cấp.
+* **Menu Frame Rates (FPS)**: Nhảy mức chuẩn mực 15, 30 hoặc 60 fps với các cấp độ hiển thị.
+* **Mic & System Sound**: Checkbox có tính năng chia sẻ audio màn hình, có lưu ý phụ thuộc tùy hệ điều hành OS (Khó hoạt động trên macOS bản chất hạn chế ghi âm phần cứng so với nhân Chromium Windows).
+* **Bong bóng Cảnh Báo (Notification Badge)**: Huy hiệu đếm số luồng Video hiện hành được chiếu tại phần góc Toolbar giúp người truy cập dễ nhận diện những ai đang tương tác.
 
 ---
 
 ## 9. Vòng đời & Dọn dẹp tài nguyên
 
-### Luồng bắt đầu chia sẻ
+Với Node Browser chạy Chromium/Safari, Leak Ram về lâu về dài khi xử lý GPU Decode là một vấn đề báo động. Nêu thuật toán sau đảm bảo làm sạch:
 
-```
-Người dùng nhấn "Share Screen"
-  → handleScreenShareToggle()
-    → startSharing(resolution, audio, fps)
-      → getDisplayMedia({ video: constraints, audio })
-        → MediaStream được thu
-          → Tạo shareId
-          → Thêm video+audio track vào tất cả RTCPeerConnection
-          → Tái thương lượng SDP với mỗi peer
-          → Phát 'screen:start' qua Socket.io
-          → Tạo phần tử <video> ẩn
-          → createScreenShareImage() → fabric.Rect
-          → startFrameLoop() → vòng lặp requestAnimationFrame
-```
-
-### Luồng dừng chia sẻ
-
-```
-Người dùng nhấn "Stop" HOẶC nút "Dừng chia sẻ" trên thanh trình duyệt
-  → stopSharing()
-    → Dừng tất cả track của MediaStream
-    → Gỡ track khỏi tất cả RTCPeerConnection (khớp chính xác)
-    → Tái thương lượng SDP với mỗi peer
-    → stopFrameLoop(shareId) → cancelAnimationFrame
-    → Gỡ fabric.Rect khỏi canvas
-    → Dọn dẹp phần tử <video>
-    → Phát 'screen:stop' qua Socket.io
-```
-
-### Dọn dẹp khi ngắt kết nối (Máy chủ)
-
-```
-Socket bị ngắt kết nối
-  → screen.handler.js trình lắng nghe 'disconnect'
-    → Tìm tất cả luồng chia sẻ của socket này
-    → Xóa khỏi Map activeShares
-    → Phát 'screen:stopped' cho mỗi luồng bị xóa
-```
-
-### Dọn dẹp khi gỡ component (Client)
-
-```
-RoomPage bị gỡ (unmount)
-  → useScreenShare cleanup effect
-    → Dừng tất cả media track
-    → stopAllFrameLoops()
-    → Gỡ tất cả phần tử <video> ẩn
-```
+- **Dừng Chia Sẻ (Call: `removeScreenShareOverlay`)**:
+  - Gỡ ngay đăng ký callback khỏi Fabric (`moving`, `scaling`, `modified` và `after:render`) nhờ con trỏ `cleanup()` để hệ thống Browser Garbage Collector tái thu mảng Heap.
+  - Phá hủy cấu trúc gắn trên Root Node bằng lệnh `entry.overlayDiv.removeChild(entry.videoEl)`.
+  - Phá hủy Proxy Fabric Object qua `canvas.remove(proxy)` giải phóng vòng tuần hoàn render của phần đồ họa tương tác.
+- **Unmount Toàn Bộ** (Call: `removeAllOverlays`):
+  Trong trường hợp Client Component (RoomPage) Unmounted - tự out ra ngoài, Hook Return của React Effect được kêu réo, toàn bộ Track được dừng qua `track.stop()`. Server đón `disconnect` để gửi `screen:stopped` cho Room.
 
 ---
 
 ## 10. Hạn chế đã biết
 
-| Hạn chế | Mô tả |
-|---|---|
-| **Hỗ trợ âm thanh hệ thống** | Thu âm thanh hệ thống/tab chỉ hoạt động trên trình duyệt dựa trên Chromium (Chrome, Edge). Firefox và Safari bỏ qua `audio: true` trong `getDisplayMedia` một cách im lặng. |
-| **Bật/tắt âm thanh giữa chừng** | Checkbox "Share System Audio" chỉ có hiệu lực khi bắt đầu luồng chia sẻ *tiếp theo*. Âm thanh không thể thêm vào hoặc gỡ khỏi luồng chia sẻ đang hoạt động vì `getDisplayMedia` phải được gọi lại từ đầu. |
-| **FPS vòng lặp kết xuất ≠ FPS thu hình** | Vòng lặp kết xuất Fabric chạy ở tốc độ cố định 24 fps bất kể cài đặt FPS thu hình. FPS thu hình cao hơn đảm bảo các khung hình mới hơn có sẵn nhưng không tăng tốc độ vẽ lại canvas. |
-| **Không lưu trữ vĩnh viễn** | Các đối tượng chia sẻ màn hình là tạm thời — chúng không được tuần tự hóa vào trạng thái canvas của máy chủ. Chúng chỉ tồn tại dưới dạng luồng trực tiếp. |
-| **Một video track mỗi peer** | Nếu người dùng dừng chia sẻ và ngay lập tức bắt đầu luồng mới, việc gỡ track cũ và thêm track mới có thể gây ra độ trễ tái thương lượng ngắn trên các kết nối peer. |
-| **Hiệu suất 4K** | Chia sẻ ở độ phân giải 4K với 60 fps yêu cầu tài nguyên CPU/GPU đáng kể ở cả phía người trình bày và người xem. Quá trình thu hình có thể bị trình duyệt tự động giảm độ phân giải nếu phần cứng không đáp ứng được yêu cầu. |
+1. **Âm thanh Hệ Thống macOS/Hệ Non-Chromium:** Tính năng cấp phép Web API `getDisplayMedia({ audio: true })` bị ngó lơ trên Safari Browser hoặc Firefox Browser. Cấu trúc thiết bị Mac cũng đòi hỏi người sử dụng cung cấp riêng quyền Audio Capture.
+2. **Khóa Xoay Trượt Video (Lock Rotation):** Hệ thống chỉ áp dụng ma trận 2 phương chiều `Translate X/Y` và hệ phình nén `Scale`. Ma trận xoay của DOM Element (Rotation Degree / Perspective Axis) hiện bị vô hiệu hóa cưỡng chế nhằm làm giảm hiện tượng lag rách toạ độ điểm do lệch tâm điểm Fabric Scale vs DOM Rotation Matrix.
+3. **Màn Hình Tạm Thời (Ephemeral Objects):** Khác biệt với việc bạn nạp Ảnh Bitmap/Vector có tính trường tồn - Video Live không xuất trạng thái cho Canvas JSON. F5 Trình Duyệt hay Refresh toàn bộ phòng sẽ tái nạp và xóa mất khoảnh khắc được chia sẻ đang quay màn hình, chỉ có người Live mới khởi động nối lại luồng Media được đi tiếp.

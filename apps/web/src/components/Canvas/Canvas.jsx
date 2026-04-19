@@ -11,6 +11,7 @@ import './Canvas.css'
 const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle, roomId, username, isConnected, canvasBgColor, canvasBgId, onBgColorChange }, ref) => {
   const { fabricCanvas, containerRef, canvasRef } = useInfiniteCanvas()
   const syncState = useRef({ _applying: false })
+  const screenShareLayerRef = useRef(null)
 
   // Real-time sync: serialize canvas ops ↔ socket
   useCanvasSync(fabricCanvas, syncState, roomId, isConnected, canvasBgColor, canvasBgId, onBgColorChange)
@@ -22,6 +23,7 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
     undo,
     redo,
     getFabricCanvas: () => fabricCanvas,
+    getScreenShareLayer: () => screenShareLayerRef.current,
   }))
 
   // Image pasting support
@@ -40,6 +42,7 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
         className="canvas-dot-grid"
         style={canvasBgColor ? { backgroundColor: canvasBgColor } : undefined}
       />
+      <div className="screen-share-layer" ref={screenShareLayerRef} />
       <canvas ref={canvasRef} className="draw-surface" />
 
       {/* Remote cursor overlays */}
@@ -74,3 +77,4 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
 })
 
 export default Canvas
+

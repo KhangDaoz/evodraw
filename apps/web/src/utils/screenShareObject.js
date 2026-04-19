@@ -1,7 +1,7 @@
 import * as fabric from 'fabric'
 
-// Active render loops: shareId -> animationFrameId
-const renderLoops = new Map()
+// Active overlays: shareId -> { overlayDiv, proxyRect, cleanup }
+const overlays = new Map()
 
 // Preset colors for different sharers (matches remote cursor palette)
 const SHARE_COLORS = [
@@ -21,41 +21,102 @@ function getSharerColor(username) {
 }
 
 /**
- * Create a Fabric.js Rect with a custom _render override that draws
- * live video frames via an off-screen canvas buffer. This avoids
- * Fabric v7's Image caching issues with dynamic video sources and
- * keeps the hot path as cheap as possible.
+ * Convert Fabric scene coordinates to screen CSS for a given object.
+ * Accounts for pan, zoom, and object scale.
+ *
+ * @param {fabric.Object} fabricObj - The Fabric proxy object
+ * @param {fabric.Canvas} canvas - The Fabric canvas
+ * @param {HTMLElement} overlayDiv - The DOM overlay to position
+ */
+function syncOverlayPosition(fabricObj, overlayDiv, canvas) {
+  const vpt = canvas.viewportTransform // [scaleX, skewY, skewX, scaleY, panX, panY]
+  const zoom = vpt[0]
+  const panX = vpt[4]
+  const panY = vpt[5]
+
+  // Fabric object position/size in scene coordinates
+  const left = fabricObj.left
+  const top = fabricObj.top
+  const w = fabricObj.width * fabricObj.scaleX
+  const h = fabricObj.height * fabricObj.scaleY
+
+  // Convert to screen pixels
+  const screenX = left * zoom + panX
+  const screenY = top * zoom + panY
+  const screenW = w * zoom
+  const screenH = h * zoom
+
+  overlayDiv.style.transform = `translate(${screenX}px, ${screenY}px)`
+  overlayDiv.style.width = `${screenW}px`
+  overlayDiv.style.height = `${screenH}px`
+}
+
+/**
+ * Create a native DOM video overlay and a transparent Fabric proxy object.
+ *
+ * The video element is placed in a DOM layer between the dot-grid background
+ * and the Fabric canvas. The proxy Rect sits on the Fabric canvas and handles
+ * selection/move/resize — its position is synced to the video overlay via CSS.
+ *
+ * This gives Discord-quality native video rendering (hardware-decoded, full FPS)
+ * while allowing drawings on the Fabric canvas to appear on top of the video.
  *
  * @param {HTMLVideoElement} videoEl - The video element with the screen share stream
  * @param {string} shareId - Unique share identifier
  * @param {string} username - Name of the sharer
  * @param {fabric.Canvas} canvas - The Fabric canvas instance
- * @returns {fabric.Rect} The configured Fabric object
+ * @param {HTMLElement} layerEl - The screen share layer container element
+ * @returns {{ proxyRect: fabric.Rect, overlayDiv: HTMLElement }}
  */
-export function createScreenShareImage(videoEl, shareId, username, canvas) {
+export function createScreenShareOverlay(videoEl, shareId, username, canvas, layerEl) {
   const color = getSharerColor(username)
 
   const videoW = videoEl.videoWidth || 1920
   const videoH = videoEl.videoHeight || 1080
 
-  console.log(`[ScreenShare] Creating video object: ${videoW}x${videoH} for ${username}`)
+  console.log(`[ScreenShare] Creating overlay: ${videoW}x${videoH} for ${username}`)
 
-  // Create an off-screen canvas that acts as a frame buffer.
-  // We draw the video onto this buffer in the render loop and then
-  // the Fabric _render override just blits this pre-drawn buffer,
-  // which is much cheaper than drawing the video element directly
-  // inside Fabric's render pipeline.
-  const bufferCanvas = document.createElement('canvas')
-  bufferCanvas.width = videoW
-  bufferCanvas.height = videoH
-  const bufferCtx = bufferCanvas.getContext('2d', { alpha: false })
+  // --- DOM overlay ---
+  const overlayDiv = document.createElement('div')
+  overlayDiv.className = 'screen-share-overlay'
+  overlayDiv.dataset.shareId = shareId
 
-  const rect = new fabric.Rect({
+  // Make the video visible and fill the overlay
+  videoEl.style.display = ''
+  videoEl.style.width = '100%'
+  videoEl.style.height = '100%'
+  videoEl.style.objectFit = 'contain'
+  videoEl.style.pointerEvents = 'none'
+  videoEl.style.borderRadius = '4px'
+
+  // Remove from body if it was appended there (legacy pattern)
+  if (videoEl.parentNode === document.body) {
+    document.body.removeChild(videoEl)
+  }
+
+  overlayDiv.appendChild(videoEl)
+
+  // Username label
+  const label = document.createElement('div')
+  label.className = 'screen-share-label'
+  label.style.background = color
+  label.textContent = username
+  overlayDiv.appendChild(label)
+
+  // Border indicator
+  overlayDiv.style.outline = `2px solid ${color}`
+  overlayDiv.style.outlineOffset = '-1px'
+
+  // Inject into the screen share layer
+  layerEl.appendChild(overlayDiv)
+
+  // --- Fabric proxy (transparent, interaction-only) ---
+  const proxyRect = new fabric.Rect({
     left: 100,
     top: 100,
     width: videoW,
     height: videoH,
-    fill: '#000',
+    fill: 'rgba(0, 0, 0, 0.005)',
     originX: 'left',
     originY: 'top',
     selectable: true,
@@ -73,21 +134,15 @@ export function createScreenShareImage(videoEl, shareId, username, canvas) {
     lockRotation: true,
     hasRotatingPoint: false,
     objectCaching: false,
-    stroke: color,
-    strokeWidth: 2,
+    stroke: 'transparent',
+    strokeWidth: 0,
   })
 
-  // Stash references on the object for the render loop
-  rect._videoEl = videoEl
-  rect._bufferCanvas = bufferCanvas
-  rect._bufferCtx = bufferCtx
-
-  // Override _render to blit the pre-drawn buffer canvas
-  rect._render = function (ctx) {
-    if (this._bufferCanvas) {
-      ctx.drawImage(this._bufferCanvas, -this.width / 2, -this.height / 2, this.width, this.height)
-    }
-  }
+  // Mark as screen share (excluded from serialization/snapshots)
+  proxyRect._evoScreenShare = true
+  proxyRect._evoShareId = shareId
+  proxyRect._evoShareUser = username
+  proxyRect._evoShareColor = color
 
   // Scale to a reasonable default size (640x360 or fit within viewport)
   const vw = canvas.getWidth()
@@ -95,107 +150,113 @@ export function createScreenShareImage(videoEl, shareId, username, canvas) {
   const maxW = Math.min(640, vw * 0.6)
   const maxH = Math.min(360, vh * 0.6)
   const scale = Math.min(maxW / videoW, maxH / videoH, 1)
-  rect.scaleX = scale
-  rect.scaleY = scale
+  proxyRect.scaleX = scale
+  proxyRect.scaleY = scale
 
   // Center on viewport
   const vpt = canvas.viewportTransform
   const centerX = (vw / 2 - vpt[4]) / vpt[0]
   const centerY = (vh / 2 - vpt[5]) / vpt[3]
-  rect.left = centerX - (videoW * scale) / 2
-  rect.top = centerY - (videoH * scale) / 2
+  proxyRect.left = centerX - (videoW * scale) / 2
+  proxyRect.top = centerY - (videoH * scale) / 2
 
-  // Mark as screen share (excluded from serialization/snapshots)
-  rect._evoScreenShare = true
-  rect._evoShareId = shareId
-  rect._evoShareUser = username
-  rect._evoShareColor = color
+  // Initial position sync
+  syncOverlayPosition(proxyRect, overlayDiv, canvas)
 
-  return rect
-}
+  // --- Event bindings: keep overlay in sync ---
 
-/**
- * Start a render loop that copies video frames into an off-screen buffer
- * and then requests a Fabric re-render. The buffer copy is done outside
- * of Fabric's pipeline so it doesn't block other canvas interactions.
- *
- * Optimizations applied:
- * - Off-screen buffer: video → buffer is a simple blit, independent of canvas size
- * - requestRenderAll instead of renderAll: deduplicates multiple render calls
- *   to a single paint at the browser's next animation frame
- * - Frame throttling: only copies a new frame when enough time has elapsed
- * - No per-frame logging
- *
- * @param {fabric.Canvas} canvas - The Fabric canvas instance
- * @param {fabric.Object} fabricObj - The fabric object with custom _render
- * @param {HTMLVideoElement} videoEl - The source video element
- * @param {string} shareId - The share ID for tracking
- */
-export function startFrameLoop(canvas, fabricObj, videoEl, shareId) {
-  // Cancel any existing loop for this shareId
-  stopFrameLoop(shareId)
+  // Sync on move
+  const onMoving = () => syncOverlayPosition(proxyRect, overlayDiv, canvas)
+  proxyRect.on('moving', onMoving)
 
-  let lastTime = 0
-  const TARGET_FPS = 24
-  const FRAME_INTERVAL = 1000 / TARGET_FPS
+  // Sync on scale
+  const onScaling = () => syncOverlayPosition(proxyRect, overlayDiv, canvas)
+  proxyRect.on('scaling', onScaling)
 
-  const bufferCtx = fabricObj._bufferCtx
-  const bufferCanvas = fabricObj._bufferCanvas
+  // Sync on modified (after drag/scale ends — snap final position)
+  const onModified = () => syncOverlayPosition(proxyRect, overlayDiv, canvas)
+  proxyRect.on('modified', onModified)
 
-  function render(now) {
-    // Bail if the Fabric object was removed from the canvas
-    if (!fabricObj.canvas) {
-      renderLoops.delete(shareId)
-      return
+  // Sync all overlays on viewport transform (pan/zoom)
+  const onViewportTransform = () => {
+    for (const [, entry] of overlays.entries()) {
+      syncOverlayPosition(entry.proxyRect, entry.overlayDiv, entry.canvas)
     }
-
-    const elapsed = now - lastTime
-    if (elapsed >= FRAME_INTERVAL) {
-      if (videoEl.readyState >= videoEl.HAVE_CURRENT_DATA) {
-        // Resize buffer if video resolution changed dynamically
-        if (bufferCanvas.width !== videoEl.videoWidth || bufferCanvas.height !== videoEl.videoHeight) {
-          bufferCanvas.width = videoEl.videoWidth
-          bufferCanvas.height = videoEl.videoHeight
-        }
-
-        // Copy the current video frame into the off-screen buffer
-        bufferCtx.drawImage(videoEl, 0, 0, bufferCanvas.width, bufferCanvas.height)
-
-        // Mark the object dirty and request (not force) a re-render.
-        // requestRenderAll coalesces multiple calls into one paint.
-        fabricObj.dirty = true
-        canvas.requestRenderAll()
-      }
-      lastTime = now - (elapsed % FRAME_INTERVAL)
-    }
-
-    const frameId = requestAnimationFrame(render)
-    renderLoops.set(shareId, frameId)
   }
 
-  const frameId = requestAnimationFrame(render)
-  renderLoops.set(shareId, frameId)
+  // Fabric fires different events depending on version for viewport changes.
+  // We listen on the canvas-level events.
+  canvas.on('after:render', onViewportTransform)
+
+  // Cleanup function
+  const cleanup = () => {
+    proxyRect.off('moving', onMoving)
+    proxyRect.off('scaling', onScaling)
+    proxyRect.off('modified', onModified)
+    canvas.off('after:render', onViewportTransform)
+  }
+
+  // Store in registry
+  overlays.set(shareId, {
+    overlayDiv,
+    proxyRect,
+    videoEl,
+    canvas,
+    cleanup,
+  })
+
+  return { proxyRect, overlayDiv }
 }
 
 /**
- * Stop the render loop for a given share.
+ * Remove a screen share overlay and its proxy object.
  *
- * @param {string} shareId - The share ID to stop
+ * @param {string} shareId - The share ID to remove
+ * @param {fabric.Canvas} [canvas] - Optional canvas to remove proxy from
  */
-export function stopFrameLoop(shareId) {
-  const frameId = renderLoops.get(shareId)
-  if (frameId) {
-    cancelAnimationFrame(frameId)
-    renderLoops.delete(shareId)
+export function removeScreenShareOverlay(shareId, canvas) {
+  const entry = overlays.get(shareId)
+  if (!entry) return
+
+  // Run cleanup (unbind events)
+  entry.cleanup()
+
+  // Remove DOM overlay
+  if (entry.overlayDiv && entry.overlayDiv.parentNode) {
+    // Detach video element first (caller may want to stop the stream separately)
+    if (entry.videoEl && entry.videoEl.parentNode === entry.overlayDiv) {
+      entry.overlayDiv.removeChild(entry.videoEl)
+    }
+    entry.overlayDiv.parentNode.removeChild(entry.overlayDiv)
+  }
+
+  // Remove Fabric proxy
+  const targetCanvas = canvas || entry.canvas
+  if (targetCanvas && entry.proxyRect) {
+    targetCanvas.remove(entry.proxyRect)
+    targetCanvas.requestRenderAll()
+  }
+
+  overlays.delete(shareId)
+}
+
+/**
+ * Remove all screen share overlays (cleanup on unmount).
+ *
+ * @param {fabric.Canvas} [canvas] - Optional canvas reference
+ */
+export function removeAllOverlays(canvas) {
+  for (const [shareId] of overlays.entries()) {
+    removeScreenShareOverlay(shareId, canvas)
   }
 }
 
 /**
- * Stop all active render loops (cleanup on unmount).
+ * Force re-sync all overlay positions. Call this after a viewport
+ * transform that doesn't trigger Fabric's after:render (e.g. programmatic zoom).
  */
-export function stopAllFrameLoops() {
-  for (const [, frameId] of renderLoops.entries()) {
-    cancelAnimationFrame(frameId)
+export function syncAllOverlays() {
+  for (const [, entry] of overlays.entries()) {
+    syncOverlayPosition(entry.proxyRect, entry.overlayDiv, entry.canvas)
   }
-  renderLoops.clear()
 }

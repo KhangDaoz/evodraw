@@ -1,32 +1,34 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getSocket } from '../services/socket'
 import {
-  createScreenShareImage,
-  startFrameLoop,
-  stopFrameLoop,
-  stopAllFrameLoops,
+  createScreenShareOverlay,
+  removeScreenShareOverlay,
+  removeAllOverlays,
 } from '../utils/screenShareObject'
 
 /**
  * Screen share hook — handles both presenting and viewing.
  *
- * Screen shares appear as movable/resizable fabric.Image objects on the canvas.
- * Multiple users can share simultaneously.
+ * Screen shares use a hybrid DOM overlay approach: a native <video> element
+ * renders in a DOM layer between the dot-grid and the Fabric canvas, giving
+ * Discord-quality playback. A transparent Fabric proxy Rect handles
+ * selection/move/resize. Drawings on the canvas appear on top of the video.
  *
  * @param {string} roomId
  * @param {string} username
  * @param {boolean} isConnected
  * @param {fabric.Canvas|null} fabricCanvas
  * @param {React.MutableRefObject} peersRef - Shared peer connection pool (from useVoiceChat)
+ * @param {HTMLElement|null} screenShareLayer - The DOM layer for video overlays
  */
-export default function useScreenShare(roomId, username, isConnected, fabricCanvas, peersRef) {
+export default function useScreenShare(roomId, username, isConnected, fabricCanvas, peersRef, screenShareLayer) {
   const [isSharing, setIsSharing] = useState(false)
   const [activeShares, setActiveShares] = useState(new Map()) // shareId -> { socketId, username }
 
   const localStreamRef = useRef(null)
   const shareIdRef = useRef(null)
   const videoElementsRef = useRef(new Map()) // shareId -> HTMLVideoElement
-  const fabricImagesRef = useRef(new Map()) // shareId -> fabric.Image
+  const proxyRectsRef = useRef(new Map()) // shareId -> fabric.Rect
 
   const usernameRef = useRef(username)
   useEffect(() => {
@@ -38,23 +40,17 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     return `share-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
   }, [])
 
-  // Remove a screen share canvas object and cleanup resources
+  // Remove a screen share overlay and cleanup resources
   const removeShareObject = useCallback((shareId) => {
-    stopFrameLoop(shareId)
-
-    const img = fabricImagesRef.current.get(shareId)
-    if (img && fabricCanvas) {
-      fabricCanvas.remove(img)
-      fabricCanvas.requestRenderAll()
-    }
-    fabricImagesRef.current.delete(shareId)
+    removeScreenShareOverlay(shareId, fabricCanvas)
 
     const videoEl = videoElementsRef.current.get(shareId)
     if (videoEl) {
       videoEl.srcObject = null
-      videoEl.remove()
+      if (videoEl.parentNode) videoEl.parentNode.removeChild(videoEl)
     }
     videoElementsRef.current.delete(shareId)
+    proxyRectsRef.current.delete(shareId)
   }, [fabricCanvas])
 
   // Build video constraints from resolution and fps options
@@ -108,14 +104,31 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     }
   }, [])
 
+  // Helper: create overlay for a video element once it's ready
+  const setupOverlay = useCallback((videoEl, shareId, sharerName) => {
+    if (!fabricCanvas || !screenShareLayer) return
+
+    console.log('[ScreenShare] Setting up overlay:', videoEl.videoWidth, 'x', videoEl.videoHeight, 'for', sharerName)
+
+    const { proxyRect } = createScreenShareOverlay(
+      videoEl, shareId, sharerName, fabricCanvas, screenShareLayer
+    )
+
+    fabricCanvas.add(proxyRect)
+    fabricCanvas.requestRenderAll()
+
+    videoElementsRef.current.set(shareId, videoEl)
+    proxyRectsRef.current.set(shareId, proxyRect)
+  }, [fabricCanvas, screenShareLayer])
+
   // Start sharing my screen
   const startSharing = useCallback(async (initialRes = '1080p', withAudio = false, initialFps = 30) => {
     if (isSharing) {
       console.log('[ScreenShare] Already sharing, ignoring')
       return
     }
-    if (!fabricCanvas) {
-      console.warn('[ScreenShare] fabricCanvas is null — cannot start sharing')
+    if (!fabricCanvas || !screenShareLayer) {
+      console.warn('[ScreenShare] fabricCanvas or screenShareLayer is null — cannot start sharing')
       return
     }
     console.log('[ScreenShare] Starting screen share...')
@@ -173,25 +186,16 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
         socket.emit('screen:start', { roomId, shareId })
       }
 
-      // Also add to own canvas as a local preview
+      // Create local preview as a DOM overlay
       const videoEl = document.createElement('video')
       videoEl.srcObject = stream
       videoEl.muted = true
       videoEl.playsInline = true
       videoEl.autoplay = true
-      videoEl.style.display = 'none'
-      document.body.appendChild(videoEl)
 
       videoEl.onloadedmetadata = () => {
         videoEl.play().then(() => {
-          console.log('[ScreenShare] Local video playing, creating canvas object', videoEl.videoWidth, 'x', videoEl.videoHeight)
-          const img = createScreenShareImage(videoEl, shareId, usernameRef.current + ' (You)', fabricCanvas)
-          fabricCanvas.add(img)
-          fabricCanvas.requestRenderAll()
-          startFrameLoop(fabricCanvas, img, videoEl, shareId)
-
-          videoElementsRef.current.set(shareId, videoEl)
-          fabricImagesRef.current.set(shareId, img)
+          setupOverlay(videoEl, shareId, usernameRef.current + ' (You)')
         }).catch(err => console.error('[ScreenShare] Local video play failed', err))
       }
 
@@ -204,7 +208,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       console.log('[ScreenShare] Cancelled or error:', err.message)
       setIsSharing(false)
     }
-  }, [isSharing, fabricCanvas, roomId, peersRef, generateShareId])
+  }, [isSharing, fabricCanvas, screenShareLayer, roomId, peersRef, generateShareId, buildVideoConstraints, setupOverlay])
 
   // Stop sharing my screen
   const stopSharing = useCallback(() => {
@@ -247,7 +251,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       localStreamRef.current = null
     }
 
-    // Remove local preview from canvas
+    // Remove overlay from DOM + proxy from canvas
     removeShareObject(shareId)
 
     // Notify room
@@ -309,7 +313,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
 
   // Handle incoming remote video tracks (from WebRTC)
   useEffect(() => {
-    if (!fabricCanvas) return
+    if (!fabricCanvas || !screenShareLayer) return
 
     const handleRemoteVideoTrack = (e) => {
       const { socketId, track, stream } = e.detail
@@ -337,8 +341,6 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
         videoEl.muted = true
         videoEl.playsInline = true
         videoEl.autoplay = true
-        videoEl.style.display = 'none'
-        document.body.appendChild(videoEl)
         videoElementsRef.current.set(retryKey, videoEl)
 
         // Store pending info for retry
@@ -348,28 +350,18 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
         return
       }
 
-      // Already have a canvas object for this share? Skip
-      if (fabricImagesRef.current.has(matchedShareId)) return
+      // Already have a proxy for this share? Skip
+      if (proxyRectsRef.current.has(matchedShareId)) return
 
       const videoEl = document.createElement('video')
       videoEl.srcObject = stream || new MediaStream([track])
       videoEl.muted = true
       videoEl.playsInline = true
       videoEl.autoplay = true
-      videoEl.style.display = 'none'
-      document.body.appendChild(videoEl)
 
       videoEl.onloadedmetadata = () => {
         videoEl.play().then(() => {
-          console.log('[ScreenShare] Remote video playing, creating canvas object', videoEl.videoWidth, 'x', videoEl.videoHeight)
-          const img = createScreenShareImage(videoEl, matchedShareId, matchedUsername, fabricCanvas)
-          fabricCanvas.add(img)
-          fabricCanvas.sendObjectToBack(img)
-          fabricCanvas.requestRenderAll()
-          startFrameLoop(fabricCanvas, img, videoEl, matchedShareId)
-
-          videoElementsRef.current.set(matchedShareId, videoEl)
-          fabricImagesRef.current.set(matchedShareId, img)
+          setupOverlay(videoEl, matchedShareId, matchedUsername)
         }).catch(err => console.error('[ScreenShare] Remote video play failed', err))
       }
     }
@@ -379,11 +371,11 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     return () => {
       window.removeEventListener('evodraw:remote_video_track', handleRemoteVideoTrack)
     }
-  }, [fabricCanvas, activeShares])
+  }, [fabricCanvas, screenShareLayer, activeShares, setupOverlay])
 
   // Retry pending video tracks when activeShares updates
   useEffect(() => {
-    if (!fabricCanvas || activeShares.size === 0) return
+    if (!fabricCanvas || !screenShareLayer || activeShares.size === 0) return
 
     for (const [key, videoEl] of videoElementsRef.current.entries()) {
       if (!key.startsWith('pending-')) continue
@@ -399,36 +391,22 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
         }
       }
 
-      if (!matchedShareId || fabricImagesRef.current.has(matchedShareId)) continue
+      if (!matchedShareId || proxyRectsRef.current.has(matchedShareId)) continue
 
       // Move from pending to real
       videoElementsRef.current.delete(key)
 
       videoEl.onloadedmetadata = () => {
         videoEl.play()
-        const img = createScreenShareImage(videoEl, matchedShareId, matchedUsername, fabricCanvas)
-        fabricCanvas.add(img)
-        fabricCanvas.sendObjectToBack(img)
-        fabricCanvas.requestRenderAll()
-        startFrameLoop(fabricCanvas, img, videoEl, matchedShareId)
-
-        videoElementsRef.current.set(matchedShareId, videoEl)
-        fabricImagesRef.current.set(matchedShareId, img)
+        setupOverlay(videoEl, matchedShareId, matchedUsername)
       }
 
       // If already loaded
       if (videoEl.readyState >= 2) {
-        const img = createScreenShareImage(videoEl, matchedShareId, matchedUsername, fabricCanvas)
-        fabricCanvas.add(img)
-        fabricCanvas.sendObjectToBack(img)
-        fabricCanvas.requestRenderAll()
-        startFrameLoop(fabricCanvas, img, videoEl, matchedShareId)
-
-        videoElementsRef.current.set(matchedShareId, videoEl)
-        fabricImagesRef.current.set(matchedShareId, img)
+        setupOverlay(videoEl, matchedShareId, matchedUsername)
       }
     }
-  }, [fabricCanvas, activeShares])
+  }, [fabricCanvas, screenShareLayer, activeShares, setupOverlay])
 
   // Handle new peer connections: add local screen tracks if sharing
   useEffect(() => {
@@ -462,10 +440,10 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(t => t.stop())
       }
-      stopAllFrameLoops()
+      removeAllOverlays(fabricCanvas)
       for (const videoEl of videoElementsRef.current.values()) {
         videoEl.srcObject = null
-        videoEl.remove()
+        if (videoEl.parentNode) videoEl.parentNode.removeChild(videoEl)
       }
     }
   }, [])

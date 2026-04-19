@@ -3,6 +3,8 @@ import { useParams, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import useRoom from '../../hooks/useRoom'
 import useChat from '../../hooks/useChat'
 import useVoiceChat from '../../hooks/useVoiceChat'
+import useScreenShare from '../../hooks/useScreenShare'
+import useScreenShareControls from '../../hooks/useScreenShareControls'
 import { getSocket } from '../../services/socket'
 import Toolbar from '../../components/Toolbar/Toolbar'
 import BottomBar from '../../components/BottomBar/BottomBar'
@@ -29,6 +31,7 @@ export default function RoomPage() {
   const [toastMessage, setToastMessage] = useState(null)
   const unreadTimerRef = useRef(null)
   const prevMessagesLengthRef = useRef(0)
+  const canvasRef = useRef(null)
 
   // Canvas background: compute initial color based on theme
   const [canvasBgId, setCanvasBgId] = useState('default')
@@ -78,7 +81,44 @@ export default function RoomPage() {
 
   const { isConnected, connectedUsers, error, updateUsername } = useRoom(roomCode, username, passcode)
   const { messages, sendMessage } = useChat(roomCode, username)
-  const { isVoiceActive, toggleVoice, streams } = useVoiceChat(roomCode, username)
+
+  // Shared WebRTC peer connection pool (used by both voice chat and screen share)
+  const peersRef = useRef({})
+  const { isVoiceActive, toggleVoice, streams } = useVoiceChat(roomCode, username, peersRef)
+
+  // Screen share — needs fabricCanvas and screenShareLayer from canvas ref
+  const [fabricCanvas, setFabricCanvas] = useState(null)
+  const [screenShareLayer, setScreenShareLayer] = useState(null)
+  const screenShareHook = useScreenShare(
+    roomCode, username, isConnected, fabricCanvas, peersRef, screenShareLayer
+  )
+  const { isSharing, activeShares } = screenShareHook
+
+  // Screen share UI controls (resolution, fps, audio)
+  const {
+    screenResolution, screenAudio, screenFps,
+    handleToggle: handleScreenShareToggle,
+    handleResolutionChange, handleFpsChange, handleToggleAudio,
+  } = useScreenShareControls(screenShareHook)
+
+  // Keep fabricCanvas and screenShareLayer in sync when canvas ref mounts
+  useEffect(() => {
+    const fc = canvasRef.current?.getFabricCanvas()
+    if (fc && fc !== fabricCanvas) setFabricCanvas(fc)
+    const ssl = canvasRef.current?.getScreenShareLayer()
+    if (ssl && ssl !== screenShareLayer) setScreenShareLayer(ssl)
+  })
+
+  // Sync fabricCanvas and screenShareLayer after initial render when canvas ref is available
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const fc = canvasRef.current?.getFabricCanvas()
+      if (fc && fc !== fabricCanvas) setFabricCanvas(fc)
+      const ssl = canvasRef.current?.getScreenShareLayer()
+      if (ssl && ssl !== screenShareLayer) setScreenShareLayer(ssl)
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [fabricCanvas, screenShareLayer])
 
   // Canvas Background Color sync — listen for remote changes
   useEffect(() => {
@@ -88,7 +128,6 @@ export default function RoomPage() {
     const handleBgChanged = ({ bgId, bgColor }) => {
       if (bgId) {
         setCanvasBgId(bgId)
-        // Resolve the remote bgId locally against our current theme, ignoring the remote bgColor literal
         const effectiveTheme = resolveTheme(document.documentElement.getAttribute('data-theme') || 'light')
         const preset = BG_PRESETS.find(p => p.id === bgId) || BG_PRESETS[0]
         setCanvasBgColor(preset[effectiveTheme])
@@ -98,16 +137,13 @@ export default function RoomPage() {
     }
 
     socket.on('canvas_bg_changed', handleBgChanged)
-    return () => {
-      socket.off('canvas_bg_changed', handleBgChanged)
-    }
+    return () => { socket.off('canvas_bg_changed', handleBgChanged) }
   }, [isConnected])
 
   // Track unread messages and display toast when chat is closed
   useEffect(() => {
     if (messages.length > prevMessagesLengthRef.current) {
       const newMsg = messages[messages.length - 1]
-      // Only notify if chat is closed and it's not our own/system message
       if (!isChatOpen && newMsg.sender !== username && !newMsg.system) {
         setUnreadCount(prev => prev + 1)
         setToastMessage(newMsg)
@@ -162,8 +198,6 @@ export default function RoomPage() {
     updateUsername(newName)
   }
 
-  const canvasRef = useRef(null)
-
   return (
     <div className="room-page">
       <Canvas
@@ -182,7 +216,6 @@ export default function RoomPage() {
         onBgColorChange={(bgId, color) => {
           if (bgId) {
             setCanvasBgId(bgId)
-            // Use our local theme to resolve it
             const effectiveTheme = resolveTheme(document.documentElement.getAttribute('data-theme') || 'light')
             const preset = BG_PRESETS.find(p => p.id === bgId) || BG_PRESETS[0]
             setCanvasBgColor(preset[effectiveTheme])
@@ -208,6 +241,15 @@ export default function RoomPage() {
         showHint={false}
         isVoiceActive={isVoiceActive}
         onToggleVoice={toggleVoice}
+        isScreenSharing={isSharing}
+        activeShareCount={activeShares.size}
+        onToggleScreenShare={handleScreenShareToggle}
+        screenResolution={screenResolution}
+        onChangeResolution={handleResolutionChange}
+        screenAudio={screenAudio}
+        onToggleScreenAudio={handleToggleAudio}
+        screenFps={screenFps}
+        onChangeFps={handleFpsChange}
       />
 
       {/* Status bar */}

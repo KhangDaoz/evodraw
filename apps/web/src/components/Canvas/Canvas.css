@@ -45,6 +45,53 @@
   }
 }
 
+/* === Screen Share Video Layer === */
+
+.screen-share-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.screen-share-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  border-radius: 4px;
+  overflow: hidden;
+  will-change: transform, width, height;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.screen-share-overlay video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  border-radius: 4px;
+}
+
+.screen-share-label {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .draw-surface {
   position: absolute;
   inset: 0;

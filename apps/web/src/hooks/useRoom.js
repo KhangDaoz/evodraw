@@ -36,20 +36,21 @@ export default function useRoom(roomCode, currentUsername, passcode) {
     setIsConnected(false)
   }, [])
 
-  const handleUserJoined = useCallback(({ username: joinedUser }) => {
+  const handleUserJoined = useCallback((user) => {
     setConnectedUsers((prev) => {
-      if (prev.includes(joinedUser)) return prev
-      return [...prev, joinedUser]
+      if (prev.some((u) => u.socketId === user.socketId)) return prev
+      return [...prev, { socketId: user.socketId, username: user.username }]
     })
   }, [])
 
-  const handleUserLeft = useCallback(({ username: leftUser }) => {
-    setConnectedUsers((prev) => prev.filter((u) => u !== leftUser))
+  const handleUserLeft = useCallback(({ socketId }) => {
+    setConnectedUsers((prev) => prev.filter((u) => u.socketId !== socketId))
   }, [])
 
   const handleRoomUsers = useCallback(({ users }) => {
-    // Server sends the full authoritative list; exclude self
-    setConnectedUsers(users.filter((u) => u !== usernameRef.current))
+    // Server sends the full authoritative list; exclude self by socketId
+    const myId = getSocket()?.id
+    setConnectedUsers(users.filter((u) => u.socketId !== myId))
   }, [])
 
   const handleRoomError = useCallback((err) => {

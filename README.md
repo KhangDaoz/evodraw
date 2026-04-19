@@ -1,4 +1,4 @@
-<img src="./docs/icon.png" alt="evodraw icon" width="48" />
+<img src="./apps/web/public/icon.png" alt="evodraw icon" width="48" />
 
 # evodraw
 
@@ -57,8 +57,6 @@ evodraw/
 ```
 
 ## How to create (npm workspace)
-
-> Mục tiêu: setup bản **JavaScript cơ bản** để dễ học trước (không dùng TypeScript).
 
 ## Bước 1 — Tạo root project
 
@@ -267,16 +265,4 @@ npm run dev:desktop
 
 # Chạy đồng thời cả 3 app
 npm run dev
-```
-
----
-
-## Kiểm tra cấu trúc
-
-```bash
-# Linux/macOS
-find . -not -path '*/node_modules/*' | sort
-
-# Windows (PowerShell)
-tree /f /a | findstr /v "node_modules"
 ```

@@ -2,17 +2,22 @@ import { markRoomActivity } from '../utils/roomActivity.js';
 import Room from '../models/Room.js';
 import bcrypt from 'bcrypt';
 
-// roomId -> Map<socketId, username>
-const roomMembers = new Map();
-
-function getRoomUsers(roomId) {
-    const members = roomMembers.get(roomId);
-    if (!members) return [];
-    return Array.from(members.entries()).map(([socketId, username]) => ({ socketId, username }));
+async function getRoomUsers(io, roomId) {
+    try {
+        const sockets = await io.in(roomId).fetchSockets();
+        return sockets.map(s => ({
+            socketId: s.id,
+            username: s.data.username
+        }));
+    } catch (err) {
+        console.error('Error fetching sockets:', err);
+        return [];
+    }
 }
 
-function broadcastRoomUsers(io, roomId) {
-    io.to(roomId).emit('room_users', { users: getRoomUsers(roomId) });
+async function broadcastRoomUsers(io, roomId) {
+    const users = await getRoomUsers(io, roomId);
+    io.to(roomId).emit('room_users', { users });
 }
 
 export const registerRoomHandlers = (io, socket) => {
@@ -42,9 +47,6 @@ export const registerRoomHandlers = (io, socket) => {
         socket.data.roomId = roomId;
         socket.data.username = username;
 
-        if (!roomMembers.has(roomId)) roomMembers.set(roomId, new Map());
-        roomMembers.get(roomId).set(socket.id, username);
-
         console.log(`User ${username} joined room ${roomId}`);
         markRoomActivity(roomId, { force: true });
 
@@ -58,10 +60,6 @@ export const registerRoomHandlers = (io, socket) => {
         const oldUsername = socket.data.username;
         socket.data.username = newUsername;
         
-        if (roomMembers.has(roomId)) {
-            roomMembers.get(roomId).set(socket.id, newUsername);
-        }
-
         console.log(`User ${oldUsername} changed name to ${newUsername} in room ${roomId}`);
         
         // Broadcast the new name to others
@@ -73,7 +71,6 @@ export const registerRoomHandlers = (io, socket) => {
 
     socket.on('leave_room', ({ roomId, username }) => {
         socket.leave(roomId);
-        roomMembers.get(roomId)?.delete(socket.id);
         socket.data.roomId = null;
 
         console.log(`User ${username} left room ${roomId}`);
@@ -86,7 +83,6 @@ export const registerRoomHandlers = (io, socket) => {
     socket.on('disconnect', () => {
         const { roomId, username } = socket.data;
         if (roomId) {
-            roomMembers.get(roomId)?.delete(socket.id);
             socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
             broadcastRoomUsers(io, roomId);
         }

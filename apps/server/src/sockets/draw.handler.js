@@ -1,19 +1,16 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
+import { getRoom, updateRoomService } from '../services/room.service.js';
 
-// In-memory store for room background colors
 const roomBgColors = new Map();
 
 export const registerDrawHandlers = (io, socket) => {
-    // High-frequency event: Drawing a stroke
-    // Expected payload: { roomId: string, stroke: object }
-    // We broadcast this purely in memory (Live State)
+    // draw event payload {roomId, stroke: { id, type, points, color, width, ... }}
     socket.on('draw_stroke', (payload) => {
         socket.to(payload.roomId).emit('draw_stroke_received', payload.stroke);
         markRoomActivity(payload?.roomId);
     });
 
-    // High-frequency event: Moving mouse cursor
-    // Expected payload: { roomId: string, position: { x, y }, username: string }
+    // cursor move payload { roomId: string, position: { x, y }, username: string }
     socket.on('cursor_move', (payload) => {
         socket.to(payload.roomId).emit('cursor_moved', payload);
         markRoomActivity(payload?.roomId);
@@ -36,33 +33,36 @@ export const registerDrawHandlers = (io, socket) => {
         markRoomActivity(payload?.roomId);
     });
 
-    // ── Snapshot persistence (blind store) ──
-
-    // Client pushes a full canvas snapshot for server-side persistence
-    // Expected payload: { roomId: string, elements: Array, sceneVersion: number }
+    // client pushes a full canvas snapshot for server-side persistence
     socket.on('save_snapshot', async ({ roomId, elements, sceneVersion }) => {
         if (!roomId || !Array.isArray(elements) || typeof sceneVersion !== 'number') return;
         try {
-            await Room.saveSnapshot(roomId, elements, sceneVersion);
+            await updateRoomService({
+                code: roomId,
+                passcode: '',
+                roomVersion: sceneVersion,
+                elements,
+            });
             markRoomActivity(roomId);
         } catch (err) {
             console.error(`[Snapshot] Failed to save for room ${roomId}:`, err.message);
         }
     });
 
-    // Late joiner requests stored snapshot from server
-    // Server responds with MongoDB data first, also asks peers as fallback
+    // client request current snapshot of room
     socket.on('request_snapshot', async ({ roomId }) => {
         if (!roomId) return;
         try {
-            const snapshot = await Room.getSnapshot(roomId);
-            if (snapshot) {
-                socket.emit('snapshot_loaded', snapshot);
+            const room = await getRoom({ code: roomId, passcode: '' });
+            if (room) {
+                socket.emit('snapshot_loaded', {
+                    elements: Array.isArray(room.elements) ? room.elements : [],
+                    sceneVersion: typeof room.roomVersion === 'number' ? room.roomVersion : 0,
+                });
             }
         } catch (err) {
             console.error(`[Snapshot] Failed to load for room ${roomId}:`, err.message);
         }
-        // Also ask peers as fallback (existing behavior)
         socket.to(roomId).emit('canvas_state_request', { requesterId: socket.id });
     });
 

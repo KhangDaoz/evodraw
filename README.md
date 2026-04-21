@@ -36,10 +36,11 @@ evodraw/
 │       │   ├── config/
 │       │   │   └── db.js
 │       │   ├── controllers/
+│       │   ├── middlewares/
 │       │   ├── models/
 │       │   ├── routes/
-│       │   ├── middlewares/
-│       │   ├── socket/               # Xử lý realtime
+│       │   ├── services/
+│       │   ├── sockets/              # Xử lý realtime
 │       │   │   ├── index.js          # Khởi tạo Socket.io server
 │       │   │   ├── drawHandler.js    # Nhận/phát tọa độ vẽ
 │       │   │   └── screenHandler.js  # Nhận/phát stream màn hình

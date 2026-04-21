@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import useRoom from '../../hooks/useRoom'
 import useChat from '../../hooks/useChat'
+import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import useVoiceChat from '../../hooks/useVoiceChat'
 import useScreenShare from '../../hooks/useScreenShare'
 import useScreenShareControls from '../../hooks/useScreenShareControls'
@@ -82,15 +83,15 @@ export default function RoomPage() {
   const { isConnected, connectedUsers, error, updateUsername } = useRoom(roomCode, username, passcode)
   const { messages, sendMessage } = useChat(roomCode, username)
 
-  // Shared WebRTC peer connection pool (used by both voice chat and screen share)
-  const peersRef = useRef({})
-  const { isVoiceActive, toggleVoice, streams } = useVoiceChat(roomCode, username, peersRef)
+  // LiveKit Room — shared media transport for voice chat and screen share
+  const { room } = useLiveKitRoom(roomCode, username)
+  const { isVoiceActive, toggleVoice, streams } = useVoiceChat(room)
 
   // Screen share — needs fabricCanvas and screenShareLayer from canvas ref
   const [fabricCanvas, setFabricCanvas] = useState(null)
   const [screenShareLayer, setScreenShareLayer] = useState(null)
   const screenShareHook = useScreenShare(
-    roomCode, username, isConnected, fabricCanvas, peersRef, screenShareLayer
+    roomCode, username, isConnected, fabricCanvas, room, screenShareLayer
   )
   const { isSharing, activeShares } = screenShareHook
 

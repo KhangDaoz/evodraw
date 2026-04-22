@@ -1,7 +1,7 @@
 import * as fabric from 'fabric'
 
 // ── Versioning constants ──
-const CUSTOM_PROPS = ['_evoId', '_evoVersion', '_evoNonce']
+const CUSTOM_PROPS = ['_evoId', '_evoVersion', '_evoNonce', '_evoScreenShare', '_evoShareId', '_evoShareUser', '_evoShareColor']
 
 // Stable unique ID for every Fabric object on this canvas
 let _idCounter = 0
@@ -71,6 +71,11 @@ async function deserializeObject(json) {
   if (json._evoId) obj._evoId = json._evoId
   if (typeof json._evoVersion === 'number') obj._evoVersion = json._evoVersion
   if (typeof json._evoNonce === 'number') obj._evoNonce = json._evoNonce
+  // Restore screen share metadata
+  if (json._evoScreenShare) obj._evoScreenShare = true
+  if (json._evoShareId) obj._evoShareId = json._evoShareId
+  if (json._evoShareUser) obj._evoShareUser = json._evoShareUser
+  if (json._evoShareColor) obj._evoShareColor = json._evoShareColor
   return obj
 }
 
@@ -92,7 +97,6 @@ export function attachSerializer(canvas, onOperation, state) {
   const onAdded = ({ target }) => {
     if (state._applying) return
     if (target._evoDrawing) return // skip in-progress shape drawing
-    if (target._evoScreenShare) return // skip live screen share objects
     bumpVersion(target)
     onOperation({
       type: 'object:added',
@@ -102,7 +106,6 @@ export function attachSerializer(canvas, onOperation, state) {
 
   const onModified = ({ target }) => {
     if (state._applying) return
-    if (target._evoScreenShare) return // skip live screen share objects
     bumpVersion(target)
     onOperation({
       type: 'object:modified',
@@ -114,7 +117,6 @@ export function attachSerializer(canvas, onOperation, state) {
   const onRemoved = ({ target }) => {
     if (state._applying) return
     if (target._evoDrawing) return // skip temp arrow parts
-    if (target._evoScreenShare) return // skip live screen share objects
     onOperation({
       type: 'object:removed',
       id: ensureId(target),
@@ -189,9 +191,9 @@ export async function applyRemoteOp(canvas, op, state) {
  * Serialize the full canvas state (for initial sync / snapshots).
  * Includes version metadata for each element.
  */
-export function serializeCanvas(canvas) {
+export function serializeCanvas(canvas, { includeScreenShares = false } = {}) {
   const objects = canvas.getObjects()
-    .filter(obj => !obj._evoScreenShare) // exclude live screen shares
+    .filter(obj => includeScreenShares || !obj._evoScreenShare)
     .map(serializeObject)
   return { objects }
 }

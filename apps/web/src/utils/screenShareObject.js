@@ -3,6 +3,14 @@ import * as fabric from 'fabric'
 // Active overlays: shareId -> { overlayDiv, proxyRect, cleanup }
 const overlays = new Map()
 
+/**
+ * Find an existing screen share proxy rect on the canvas by shareId.
+ * Used to detect rects that arrived via peer sync before the video track.
+ */
+export function findScreenShareRect(canvas, shareId) {
+  return canvas.getObjects().find(o => o._evoShareId === shareId) || null
+}
+
 // Preset colors for different sharers (matches remote cursor palette)
 const SHARE_COLORS = [
   '#e03131', '#1971c2', '#2f9e44', '#f76707',
@@ -68,7 +76,7 @@ function syncOverlayPosition(fabricObj, overlayDiv, canvas) {
  * @param {HTMLElement} layerEl - The screen share layer container element
  * @returns {{ proxyRect: fabric.Rect, overlayDiv: HTMLElement }}
  */
-export function createScreenShareOverlay(videoEl, shareId, username, canvas, layerEl) {
+export function createScreenShareOverlay(videoEl, shareId, username, canvas, layerEl, existingRect = null) {
   const color = getSharerColor(username)
 
   const videoW = videoEl.videoWidth || 1920
@@ -110,55 +118,67 @@ export function createScreenShareOverlay(videoEl, shareId, username, canvas, lay
   // Inject into the screen share layer
   layerEl.appendChild(overlayDiv)
 
-  // --- Fabric proxy (transparent, interaction-only) ---
-  const proxyRect = new fabric.Rect({
-    left: 100,
-    top: 100,
-    width: videoW,
-    height: videoH,
-    fill: 'rgba(0, 0, 0, 0.005)',
-    originX: 'left',
-    originY: 'top',
-    selectable: true,
-    evented: true,
-    hasControls: true,
-    hasBorders: true,
-    lockUniScaling: true,
-    borderColor: color,
-    cornerColor: color,
-    cornerStyle: 'circle',
-    cornerSize: 10,
-    transparentCorners: false,
-    borderScaleFactor: 2,
-    padding: 4,
-    lockRotation: true,
-    hasRotatingPoint: false,
-    objectCaching: false,
-    stroke: 'transparent',
-    strokeWidth: 0,
-  })
+  let proxyRect
+  let isExisting = false
 
-  // Mark as screen share (excluded from serialization/snapshots)
-  proxyRect._evoScreenShare = true
-  proxyRect._evoShareId = shareId
-  proxyRect._evoShareUser = username
-  proxyRect._evoShareColor = color
+  if (existingRect) {
+    // Reuse a rect that arrived via canvas sync (peer state)
+    proxyRect = existingRect
+    isExisting = true
+    console.log(`[ScreenShare] Reusing synced proxy rect for ${shareId}`)
+  } else {
+    // --- Fabric proxy (transparent, interaction-only) ---
+    proxyRect = new fabric.Rect({
+      left: 100,
+      top: 100,
+      width: videoW,
+      height: videoH,
+      fill: 'rgba(0, 0, 0, 0.005)',
+      originX: 'left',
+      originY: 'top',
+      selectable: true,
+      evented: true,
+      hasControls: true,
+      hasBorders: true,
+      lockUniScaling: true,
+      borderColor: color,
+      cornerColor: color,
+      cornerStyle: 'circle',
+      cornerSize: 10,
+      transparentCorners: false,
+      borderScaleFactor: 2,
+      padding: 4,
+      lockRotation: true,
+      hasRotatingPoint: false,
+      objectCaching: false,
+      stroke: 'transparent',
+      strokeWidth: 0,
+    })
 
-  // Scale to a reasonable default size (640x360 or fit within viewport)
-  const vw = canvas.getWidth()
-  const vh = canvas.getHeight()
-  const maxW = Math.min(640, vw * 0.6)
-  const maxH = Math.min(360, vh * 0.6)
-  const scale = Math.min(maxW / videoW, maxH / videoH, 1)
-  proxyRect.scaleX = scale
-  proxyRect.scaleY = scale
+    // Mark as screen share (excluded from undo history and eraser)
+    proxyRect._evoScreenShare = true
+    proxyRect._evoShareId = shareId
+    proxyRect._evoShareUser = username
+    proxyRect._evoShareColor = color
+    // Use shareId as _evoId so the canvas sync pipeline can match it
+    proxyRect._evoId = shareId
 
-  // Center on viewport
-  const vpt = canvas.viewportTransform
-  const centerX = (vw / 2 - vpt[4]) / vpt[0]
-  const centerY = (vh / 2 - vpt[5]) / vpt[3]
-  proxyRect.left = centerX - (videoW * scale) / 2
-  proxyRect.top = centerY - (videoH * scale) / 2
+    // Scale to a reasonable default size (640x360 or fit within viewport)
+    const vw = canvas.getWidth()
+    const vh = canvas.getHeight()
+    const maxW = Math.min(640, vw * 0.6)
+    const maxH = Math.min(360, vh * 0.6)
+    const scale = Math.min(maxW / videoW, maxH / videoH, 1)
+    proxyRect.scaleX = scale
+    proxyRect.scaleY = scale
+
+    // Center on presenter's viewport (scene coordinates)
+    const vpt = canvas.viewportTransform
+    const centerX = (vw / 2 - vpt[4]) / vpt[0]
+    const centerY = (vh / 2 - vpt[5]) / vpt[3]
+    proxyRect.left = centerX - (videoW * scale) / 2
+    proxyRect.top = centerY - (videoH * scale) / 2
+  }
 
   // Initial position sync
   syncOverlayPosition(proxyRect, overlayDiv, canvas)
@@ -205,7 +225,7 @@ export function createScreenShareOverlay(videoEl, shareId, username, canvas, lay
     cleanup,
   })
 
-  return { proxyRect, overlayDiv }
+  return { proxyRect, overlayDiv, isExisting }
 }
 
 /**

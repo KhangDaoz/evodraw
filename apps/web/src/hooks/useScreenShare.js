@@ -5,6 +5,7 @@ import {
   createScreenShareOverlay,
   removeScreenShareOverlay,
   removeAllOverlays,
+  findScreenShareRect,
 } from '../utils/screenShareObject'
 
 /**
@@ -120,13 +121,20 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
   const setupOverlay = useCallback((videoEl, shareId, sharerName) => {
     if (!fabricCanvas || !screenShareLayer) return
 
-    console.log('[ScreenShare] Setting up overlay:', videoEl.videoWidth, 'x', videoEl.videoHeight, 'for', sharerName)
+    // Check if a proxy rect already exists on canvas (arrived via peer sync)
+    const existingRect = findScreenShareRect(fabricCanvas, shareId)
 
-    const { proxyRect } = createScreenShareOverlay(
-      videoEl, shareId, sharerName, fabricCanvas, screenShareLayer
+    console.log('[ScreenShare] Setting up overlay:', videoEl.videoWidth, 'x', videoEl.videoHeight, 'for', sharerName,
+      existingRect ? '(reusing synced rect)' : '(creating new rect)')
+
+    const { proxyRect, isExisting } = createScreenShareOverlay(
+      videoEl, shareId, sharerName, fabricCanvas, screenShareLayer, existingRect
     )
 
-    fabricCanvas.add(proxyRect)
+    // Only add to canvas if this is a freshly created rect (presenter or no peer data yet)
+    if (!isExisting) {
+      fabricCanvas.add(proxyRect)
+    }
     fabricCanvas.requestRenderAll()
 
     videoElementsRef.current.set(shareId, videoEl)
@@ -373,9 +381,19 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
     room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
 
+    // Watch for screen share rects removed by remote canvas sync
+    // (e.g., another peer relayed the removal before LiveKit/Socket events arrived)
+    const onObjectRemoved = ({ target }) => {
+      if (target?._evoScreenShare && target._evoShareId) {
+        removeScreenShareOverlay(target._evoShareId)
+      }
+    }
+    fabricCanvas.on('object:removed', onObjectRemoved)
+
     return () => {
       room.off(RoomEvent.TrackSubscribed, handleTrackSubscribed)
       room.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
+      fabricCanvas.off('object:removed', onObjectRemoved)
     }
   }, [room, fabricCanvas, screenShareLayer, setupOverlay, removeShareObject])
 

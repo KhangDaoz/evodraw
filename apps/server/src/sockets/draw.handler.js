@@ -1,8 +1,6 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
 import { getRoom, updateRoomService } from '../services/room.service.js';
 
-const roomBgColors = new Map();
-
 export const registerDrawHandlers = (io, socket) => {
     // draw event payload {roomId, stroke: { id, type, points, color, width, ... }}
     socket.on('draw_stroke', (payload) => {
@@ -28,7 +26,6 @@ export const registerDrawHandlers = (io, socket) => {
     socket.on('canvas_bg_change', (payload) => {
         if (!payload?.roomId || !payload?.bgColor) return;
         const bgState = { bgColor: payload.bgColor, bgId: payload.bgId || 'default' };
-        roomBgColors.set(payload.roomId, bgState);
         socket.to(payload.roomId).emit('canvas_bg_changed', bgState);
         markRoomActivity(payload?.roomId);
     });

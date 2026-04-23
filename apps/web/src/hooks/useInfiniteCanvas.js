@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import * as fabric from 'fabric'
 
 /**
@@ -7,10 +7,15 @@ import * as fabric from 'fabric'
  *
  * @returns {{ fabricCanvas: fabric.Canvas|null, containerRef: React.RefObject, canvasRef: React.RefObject }}
  */
-export default function useInfiniteCanvas() {
+export default function useInfiniteCanvas(activeTool = 'select') {
   const canvasRef = useRef(null)
   const containerRef = useRef(null)
   const [fabricCanvas, setFabricCanvas] = useState(null)
+  const activeToolRef = useRef(activeTool)
+
+  useEffect(() => {
+    activeToolRef.current = activeTool
+  }, [activeTool])
 
   useEffect(() => {
     if (!canvasRef.current || !containerRef.current) return
@@ -72,12 +77,32 @@ export default function useInfiniteCanvas() {
     let isDragging = false
     let lastPosX = 0
     let lastPosY = 0
+    let prevCursors = null
+    let prevIsDrawingMode = null
 
     canvas.on('mouse:down', (opt) => {
-      // Middle Click (button 1), Right Click (button 2), or holding Alt
-      if (opt.e.button === 1 || opt.e.button === 2 || opt.e.altKey) {
+      const isHandTool = activeToolRef.current === 'hand'
+      const isTempPan = opt.e.button === 1 || opt.e.button === 2 || opt.e.altKey
+      const isHandPan = isHandTool && opt.e.button === 0
+
+      // Pan with hand tool (left drag), or temporary pan (alt/middle/right)
+      if (isHandPan || isTempPan) {
         isDragging = true
         canvas.selection = false
+        prevIsDrawingMode = canvas.isDrawingMode
+        canvas.isDrawingMode = false
+        prevCursors = {
+          defaultCursor: canvas.defaultCursor,
+          hoverCursor: canvas.hoverCursor,
+          moveCursor: canvas.moveCursor,
+          freeDrawingCursor: canvas.freeDrawingCursor,
+          upperCursor: canvas.upperCanvasEl?.style?.cursor || '',
+        }
+        canvas.defaultCursor = 'grabbing'
+        canvas.hoverCursor = 'grabbing'
+        canvas.moveCursor = 'grabbing'
+        canvas.freeDrawingCursor = 'grabbing'
+        if (canvas.upperCanvasEl) canvas.upperCanvasEl.style.cursor = 'grabbing'
         lastPosX = opt.e.clientX
         lastPosY = opt.e.clientY
         opt.e.preventDefault()
@@ -86,6 +111,14 @@ export default function useInfiniteCanvas() {
 
     canvas.on('mouse:move', (opt) => {
       if (isDragging) {
+        // Fabric may recalculate cursor on move; keep hard-locking grabbing
+        // during pan so pen/other cursors cannot override it mid-drag.
+        canvas.defaultCursor = 'grabbing'
+        canvas.hoverCursor = 'grabbing'
+        canvas.moveCursor = 'grabbing'
+        canvas.freeDrawingCursor = 'grabbing'
+        if (canvas.upperCanvasEl) canvas.upperCanvasEl.style.cursor = 'grabbing'
+
         const vpt = canvas.viewportTransform
         vpt[4] += opt.e.clientX - lastPosX
         vpt[5] += opt.e.clientY - lastPosY
@@ -101,6 +134,18 @@ export default function useInfiniteCanvas() {
         canvas.setViewportTransform(canvas.viewportTransform)
         isDragging = false
         canvas.selection = true
+        if (prevCursors) {
+          canvas.defaultCursor = prevCursors.defaultCursor
+          canvas.hoverCursor = prevCursors.hoverCursor
+          canvas.moveCursor = prevCursors.moveCursor
+          canvas.freeDrawingCursor = prevCursors.freeDrawingCursor
+          if (canvas.upperCanvasEl) canvas.upperCanvasEl.style.cursor = prevCursors.upperCursor
+          prevCursors = null
+        }
+        if (typeof prevIsDrawingMode === 'boolean') {
+          canvas.isDrawingMode = prevIsDrawingMode
+          prevIsDrawingMode = null
+        }
       }
     })
 
@@ -109,6 +154,7 @@ export default function useInfiniteCanvas() {
       if (!entries || !entries.length) return
       const { width, height } = entries[0].contentRect
       canvas.setDimensions({ width, height })
+      syncGrid()
     })
     resizeObserver.observe(containerRef.current)
 
@@ -121,6 +167,11 @@ export default function useInfiniteCanvas() {
         currentZoom = 1
         canvas.viewportTransform[4] = 0
         canvas.viewportTransform[5] = 0
+        canvas.setZoom(1)
+        canvas.setViewportTransform(canvas.viewportTransform)
+        canvas.requestRenderAll()
+        syncGrid()
+        return
       }
 
       if (currentZoom > 20) currentZoom = 20

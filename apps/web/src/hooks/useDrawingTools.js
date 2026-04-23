@@ -11,20 +11,45 @@ const hexToRgba = (hex, opacity) => {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`
 }
 
+// Tool cursors: encode tiny SVGs as data URIs so the cursor matches the
+// currently selected tool icon. Hotspots (x y) point at the tool's tip.
+const svgCursor = (svg, hotX, hotY, fallback = 'crosshair') =>
+  `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") ${hotX} ${hotY}, ${fallback}`
+
+const penCursor = svgCursor(
+  `<svg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 24 24' fill='white' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'><path d='M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/><path d='m15 5 4 4'/></svg>`,
+  2, 22
+)
+
+const eraserCursor = svgCursor(
+  `<svg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 24 24' fill='white' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'><path d='M20 20H7L3 16a1.4 1.4 0 0 1 0-2L13 4a1.4 1.4 0 0 1 2 0L20 9a1.4 1.4 0 0 1 0 2L11 20'/><path d='M10 11l4 4'/></svg>`,
+  4, 20
+)
+
+const textCursor = 'text'
+
 /**
  * Handles all drawing tool interactions on the Fabric canvas:
  * pen, eraser, shapes (rect, circle, line, arrow), and text.
  *
  * Auto-switches to "select" mode after completing a shape.
  */
-export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity = 1, strokeStyle = 'solid') {
+export default function useDrawingTools(
+  fabricCanvas,
+  activeTool,
+  onToolSelect,
+  strokeColor,
+  strokeWidth,
+  strokeOpacity = 1,
+  strokeStyle = 'solid'
+) {
   useEffect(() => {
     if (!fabricCanvas) return
 
     const colorWithOpacity = hexToRgba(strokeColor || '#000000', strokeOpacity)
     let currentDashArray = null
-    if (strokeStyle === 'dashed') currentDashArray = [strokeWidth * 2, strokeWidth * 2]
-    if (strokeStyle === 'dotted') currentDashArray = [strokeWidth, strokeWidth * 1.5]
+    if (strokeStyle === 'dashed') currentDashArray = [strokeWidth * 2, strokeWidth * 1.6]
+    if (strokeStyle === 'dotted') currentDashArray = [0.001, Math.max(strokeWidth * 1.35, 3)]
 
     // --- Pen tool setup ---
     if (activeTool === 'pen') {
@@ -43,9 +68,32 @@ export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, 
     }
 
     // --- Selection state ---
-    const canSelect = activeTool === 'select' || activeTool === 'hand'
+    const isHand = activeTool === 'hand'
+    const canSelect = activeTool === 'select' || isHand
     const isEraser = activeTool === 'eraser'
     const isText = activeTool === 'text'
+
+    // --- Tool cursor ---
+    // Fabric has multiple cursor hooks. Cover all of them so the cursor
+    // stays consistent regardless of whether the user is over an object,
+    // empty canvas, or actively drawing.
+    let toolCursor
+    if (activeTool === 'pen') toolCursor = penCursor
+    else if (isEraser) toolCursor = eraserCursor
+    else if (isText) toolCursor = textCursor
+    else if (isHand) toolCursor = 'grab'
+    else if (canSelect) toolCursor = 'default'
+    else toolCursor = 'crosshair' // shapes, line, arrow
+
+    fabricCanvas.defaultCursor = toolCursor
+    fabricCanvas.hoverCursor = isHand ? 'grab' : canSelect ? 'move' : toolCursor
+    fabricCanvas.freeDrawingCursor = toolCursor
+    fabricCanvas.moveCursor = isHand ? 'grab' : canSelect ? 'move' : toolCursor
+
+    // Apply directly to the upper canvas (Fabric only refreshes cursor on
+    // mouse move otherwise, which feels laggy right after switching tools).
+    const upperEl = fabricCanvas.upperCanvasEl
+    if (upperEl) upperEl.style.cursor = toolCursor
 
     fabricCanvas.selection = canSelect
     fabricCanvas.skipTargetFind = !canSelect && !isEraser && !isText
@@ -304,5 +352,13 @@ export default function useDrawingTools(fabricCanvas, activeTool, onToolSelect, 
       fabricCanvas.off('mouse:move', onMouseMove)
       fabricCanvas.off('mouse:up', onMouseUp)
     }
-  }, [fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle])
+  }, [
+    fabricCanvas,
+    activeTool,
+    onToolSelect,
+    strokeColor,
+    strokeWidth,
+    strokeOpacity,
+    strokeStyle,
+  ])
 }

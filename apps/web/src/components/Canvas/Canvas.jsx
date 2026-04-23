@@ -9,7 +9,7 @@ import { useRef, useImperativeHandle, forwardRef } from 'react'
 import './Canvas.css'
 
 const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle, roomId, username, isConnected, canvasBgColor, canvasBgId, onBgColorChange }, ref) => {
-  const { fabricCanvas, containerRef, canvasRef } = useInfiniteCanvas()
+  const { fabricCanvas, containerRef, canvasRef } = useInfiniteCanvas(activeTool)
   const syncState = useRef({ _applying: false })
   const screenShareLayerRef = useRef(null)
 
@@ -30,7 +30,15 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
   useImagePasting(fabricCanvas, containerRef, roomId)
 
   // Tool handling: pen, eraser, shapes, lines, arrows, text
-  useDrawingTools(fabricCanvas, activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle)
+  useDrawingTools(
+    fabricCanvas,
+    activeTool,
+    onToolSelect,
+    strokeColor,
+    strokeWidth,
+    strokeOpacity,
+    strokeStyle
+  )
 
   // Remote cursor sync + coordinate conversion
   const { remoteCursors, sceneToScreen, viewportVersion, getCursorColor } =

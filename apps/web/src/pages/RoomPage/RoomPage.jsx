@@ -32,6 +32,8 @@ export default function RoomPage() {
   const unreadTimerRef = useRef(null)
   const prevMessagesLengthRef = useRef(0)
   const canvasRef = useRef(null)
+  const chatPanelRef = useRef(null)
+  const chatToggleBtnRef = useRef(null)
 
   // Canvas background: compute initial color based on theme
   const [canvasBgId, setCanvasBgId] = useState('default')
@@ -166,6 +168,20 @@ export default function RoomPage() {
     }
   }, [isChatOpen])
 
+  // Close Messages popup when clicking outside of panel/toggle button.
+  useEffect(() => {
+    if (!isChatOpen) return
+
+    const handleOutsideClick = (e) => {
+      if (chatPanelRef.current?.contains(e.target)) return
+      if (chatToggleBtnRef.current?.contains(e.target)) return
+      setIsChatOpen(false)
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [isChatOpen])
+
   // Called by SettingsPanel when user picks a swatch or changes theme
   const handleBgChange = useCallback((bgId, bgColor) => {
     setCanvasBgId(bgId)
@@ -284,14 +300,17 @@ export default function RoomPage() {
       )}
 
       {isChatOpen && (
-        <ChatPanel
-          messages={messages}
-          onSendMessage={sendMessage}
-          username={username}
-        />
+        <div ref={chatPanelRef}>
+          <ChatPanel
+            messages={messages}
+            onSendMessage={sendMessage}
+            username={username}
+          />
+        </div>
       )}
 
       <button
+        ref={chatToggleBtnRef}
         className={`chat-toggle-btn ${isChatOpen ? 'active' : ''}`}
         onClick={() => setIsChatOpen(!isChatOpen)}
         title="Toggle Chat"

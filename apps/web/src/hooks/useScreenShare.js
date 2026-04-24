@@ -1,29 +1,42 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { RoomEvent, Track } from 'livekit-client'
 import { getSocket } from '../services/socket'
 import {
   createScreenShareOverlay,
   removeScreenShareOverlay,
   removeAllOverlays,
+  findScreenShareRect,
 } from '../utils/screenShareObject'
 
 /**
  * Screen share hook — handles both presenting and viewing.
  *
- * Screen shares use a hybrid DOM overlay approach: a native <video> element
- * renders in a DOM layer between the dot-grid and the Fabric canvas, giving
- * Discord-quality playback. A transparent Fabric proxy Rect handles
- * selection/move/resize. Drawings on the canvas appear on top of the video.
+ * Uses LiveKit for media transport instead of manual WebRTC peer connections.
+ * The DOM overlay architecture is preserved: a native <video> element renders
+ * between the dot-grid and the Fabric canvas. A transparent proxy Rect handles
+ * selection/move/resize. Drawings appear on top of the video.
+ *
+ * Publishing flow:
+ *   1. Capture display media (getDisplayMedia) with user-selected constraints
+ *   2. Publish the video track to LiveKit with shareId as the track name
+ *   3. Create a local preview overlay on the canvas
+ *   4. Emit screen:start via socket for metadata tracking
+ *
+ * Receiving flow:
+ *   1. LiveKit fires TrackSubscribed for remote screen share tracks
+ *   2. Extract the MediaStreamTrack, create a <video> element
+ *   3. Feed into the existing setupOverlay() pipeline
  *
  * @param {string} roomId
  * @param {string} username
  * @param {boolean} isConnected
  * @param {fabric.Canvas|null} fabricCanvas
- * @param {React.MutableRefObject} peersRef - Shared peer connection pool (from useVoiceChat)
+ * @param {import('livekit-client').Room} room - Shared LiveKit Room from useLiveKitRoom
  * @param {HTMLElement|null} screenShareLayer - The DOM layer for video overlays
  */
-export default function useScreenShare(roomId, username, isConnected, fabricCanvas, peersRef, screenShareLayer) {
+export default function useScreenShare(roomId, username, isConnected, fabricCanvas, room, screenShareLayer) {
   const [isSharing, setIsSharing] = useState(false)
-  const [activeShares, setActiveShares] = useState(new Map()) // shareId -> { socketId, username }
+  const [activeShares, setActiveShares] = useState(new Map()) // shareId -> { username }
 
   const localStreamRef = useRef(null)
   const shareIdRef = useRef(null)
@@ -108,13 +121,20 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
   const setupOverlay = useCallback((videoEl, shareId, sharerName) => {
     if (!fabricCanvas || !screenShareLayer) return
 
-    console.log('[ScreenShare] Setting up overlay:', videoEl.videoWidth, 'x', videoEl.videoHeight, 'for', sharerName)
+    // Check if a proxy rect already exists on canvas (arrived via peer sync)
+    const existingRect = findScreenShareRect(fabricCanvas, shareId)
 
-    const { proxyRect } = createScreenShareOverlay(
-      videoEl, shareId, sharerName, fabricCanvas, screenShareLayer
+    console.log('[ScreenShare] Setting up overlay:', videoEl.videoWidth, 'x', videoEl.videoHeight, 'for', sharerName,
+      existingRect ? '(reusing synced rect)' : '(creating new rect)')
+
+    const { proxyRect, isExisting } = createScreenShareOverlay(
+      videoEl, shareId, sharerName, fabricCanvas, screenShareLayer, existingRect
     )
 
-    fabricCanvas.add(proxyRect)
+    // Only add to canvas if this is a freshly created rect (presenter or no peer data yet)
+    if (!isExisting) {
+      fabricCanvas.add(proxyRect)
+    }
     fabricCanvas.requestRenderAll()
 
     videoElementsRef.current.set(shareId, videoEl)
@@ -131,11 +151,16 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       console.warn('[ScreenShare] fabricCanvas or screenShareLayer is null — cannot start sharing')
       return
     }
+    if (!room) {
+      console.warn('[ScreenShare] No LiveKit room available')
+      return
+    }
     console.log('[ScreenShare] Starting screen share...')
 
     try {
       const videoConstraints = buildVideoConstraints(initialRes, initialFps)
 
+      // Capture screen using browser API (we manage this ourselves for overlay preview)
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: videoConstraints,
         audio: withAudio,
@@ -154,33 +179,26 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       shareIdRef.current = shareId
       setIsSharing(true)
 
-      // Add video and audio tracks to all existing peer connections
-      Object.entries(peersRef.current).forEach(([socketId, pc]) => {
-        try {
-          pc.addTrack(videoTrack, stream)
-          if (audioTrack) {
-            pc.addTrack(audioTrack, stream)
-          }
-          // Renegotiate
-          pc.createOffer()
-            .then(offer => pc.setLocalDescription(offer).then(() => offer))
-            .then(offer => {
-              const socket = getSocket()
-              if (socket) {
-                socket.emit('webrtc:offer', {
-                  targetSocketId: socketId,
-                  offer,
-                  senderName: usernameRef.current,
-                })
-              }
-            })
-            .catch(err => console.error('[ScreenShare] Renegotiation failed', err))
-        } catch (err) {
-          console.error('[ScreenShare] Failed to add track to peer', socketId, err)
-        }
-      })
+      // Publish video track to LiveKit (with shareId as track name for remote identification)
+      try {
+        await room.localParticipant.publishTrack(videoTrack, {
+          source: Track.Source.ScreenShare,
+          name: shareId,
+        })
+        console.log('[ScreenShare] Video track published to LiveKit')
 
-      // Notify room via signaling
+        if (audioTrack) {
+          await room.localParticipant.publishTrack(audioTrack, {
+            source: Track.Source.ScreenShareAudio,
+            name: `${shareId}-audio`,
+          })
+          console.log('[ScreenShare] Audio track published to LiveKit')
+        }
+      } catch (err) {
+        console.error('[ScreenShare] Failed to publish track to LiveKit', err)
+      }
+
+      // Notify room via socket signaling (for metadata tracking)
       const socket = getSocket()
       if (socket) {
         socket.emit('screen:start', { roomId, shareId })
@@ -208,47 +226,31 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       console.log('[ScreenShare] Cancelled or error:', err.message)
       setIsSharing(false)
     }
-  }, [isSharing, fabricCanvas, screenShareLayer, roomId, peersRef, generateShareId, buildVideoConstraints, setupOverlay])
+  }, [isSharing, fabricCanvas, screenShareLayer, room, roomId, generateShareId, buildVideoConstraints, setupOverlay])
 
   // Stop sharing my screen
-  const stopSharing = useCallback(() => {
+  const stopSharing = useCallback(async () => {
     const shareId = shareIdRef.current
     if (!shareId) return
 
-    // Stop the media stream
+    // Stop the local media stream
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop())
-
-      // Remove screen tracks from all peer connections
-      Object.entries(peersRef.current).forEach(([socketId, pc]) => {
-        const senders = pc.getSenders()
-        const tracksToRemove = localStreamRef.current.getTracks()
-
-        senders.forEach(sender => {
-          if (sender.track && tracksToRemove.includes(sender.track)) {
-            try {
-              pc.removeTrack(sender)
-            } catch (e) { /* connection may be closed */ }
-          }
-        })
-
-        // Renegotiate
-        pc.createOffer()
-          .then(offer => pc.setLocalDescription(offer).then(() => offer))
-          .then(offer => {
-            const socket = getSocket()
-            if (socket) {
-              socket.emit('webrtc:offer', {
-                targetSocketId: socketId,
-                offer,
-                senderName: usernameRef.current,
-              })
-            }
-          })
-          .catch(err => console.error('[ScreenShare] Renegotiation failed', err))
-      })
-
       localStreamRef.current = null
+    }
+
+    // Unpublish screen share tracks from LiveKit
+    if (room) {
+      try {
+        for (const pub of room.localParticipant.trackPublications.values()) {
+          if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
+            await room.localParticipant.unpublishTrack(pub.track)
+          }
+        }
+        console.log('[ScreenShare] Tracks unpublished from LiveKit')
+      } catch (err) {
+        console.error('[ScreenShare] Failed to unpublish tracks', err)
+      }
     }
 
     // Remove overlay from DOM + proxy from canvas
@@ -262,14 +264,14 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
 
     shareIdRef.current = null
     setIsSharing(false)
-  }, [roomId, peersRef, removeShareObject])
+  }, [room, roomId, removeShareObject])
 
-  // Handle Socket.io signaling events
+  // Handle Socket.io signaling events (metadata tracking)
   useEffect(() => {
     const socket = getSocket()
     if (!socket || !isConnected) return
 
-    // Someone started sharing
+    // Someone started sharing (socket-based notification)
     const handleStarted = ({ socketId, shareId, username: sharerName }) => {
       setActiveShares(prev => {
         const next = new Map(prev)
@@ -311,128 +313,89 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     }
   }, [isConnected, roomId, removeShareObject])
 
-  // Handle incoming remote video tracks (from WebRTC)
+  // Handle incoming remote screen share tracks from LiveKit
   useEffect(() => {
-    if (!fabricCanvas || !screenShareLayer) return
+    if (!room || !fabricCanvas || !screenShareLayer) return
 
-    const handleRemoteVideoTrack = (e) => {
-      const { socketId, track, stream } = e.detail
-
-      // Find which shareId this socketId corresponds to
-      let matchedShareId = null
-      let matchedUsername = null
-      for (const [shareId, info] of activeShares.entries()) {
-        if (info.socketId === socketId) {
-          matchedShareId = shareId
-          matchedUsername = info.username
-          break
-        }
-      }
-
-      if (!matchedShareId) {
-        // No matching share found yet — buffer it and retry when activeShares updates
-        console.log('[ScreenShare] Received video track but no matching share yet for', socketId)
-        // Store the track to retry
-        const retryKey = `pending-${socketId}`
-        if (videoElementsRef.current.has(retryKey)) return // Already pending
-        
-        const videoEl = document.createElement('video')
-        videoEl.srcObject = stream || new MediaStream([track])
-        videoEl.muted = true
-        videoEl.playsInline = true
-        videoEl.autoplay = true
-        videoElementsRef.current.set(retryKey, videoEl)
-
-        // Store pending info for retry
-        videoEl._pendingSocketId = socketId
-        videoEl._pendingTrack = track
-        videoEl._pendingStream = stream
+    const handleTrackSubscribed = (track, publication, participant) => {
+      // Only handle screen share video tracks
+      if (track.source !== Track.Source.ScreenShare || track.kind !== Track.Kind.Video) {
         return
       }
 
-      // Already have a proxy for this share? Skip
-      if (proxyRectsRef.current.has(matchedShareId)) return
+      // Use the track name as shareId (set by the publisher)
+      const shareId = publication.trackName || `lk-${participant.identity}-${track.sid}`
+      const sharerName = participant.name || participant.identity
+
+      console.log(`[ScreenShare] Remote screen share track received from ${sharerName} (${shareId})`)
+
+      // Skip if we already have an overlay for this share
+      if (proxyRectsRef.current.has(shareId)) return
+
+      // Create a video element and feed the LiveKit track into it
+      const mediaStreamTrack = track.mediaStreamTrack
+      const stream = new MediaStream([mediaStreamTrack])
 
       const videoEl = document.createElement('video')
-      videoEl.srcObject = stream || new MediaStream([track])
+      videoEl.srcObject = stream
       videoEl.muted = true
       videoEl.playsInline = true
       videoEl.autoplay = true
 
       videoEl.onloadedmetadata = () => {
         videoEl.play().then(() => {
-          setupOverlay(videoEl, matchedShareId, matchedUsername)
+          setupOverlay(videoEl, shareId, sharerName)
         }).catch(err => console.error('[ScreenShare] Remote video play failed', err))
       }
+
+      // If the track is already producing frames, set up immediately
+      if (mediaStreamTrack.readyState === 'live' && videoEl.readyState >= 2) {
+        setupOverlay(videoEl, shareId, sharerName)
+      }
+
+      // Update active shares
+      setActiveShares(prev => {
+        const next = new Map(prev)
+        next.set(shareId, { username: sharerName })
+        return next
+      })
     }
 
-    window.addEventListener('evodraw:remote_video_track', handleRemoteVideoTrack)
+    const handleTrackUnsubscribed = (track, publication, participant) => {
+      if (track.source !== Track.Source.ScreenShare || track.kind !== Track.Kind.Video) {
+        return
+      }
+
+      const shareId = publication.trackName || `lk-${participant.identity}-${track.sid}`
+      console.log(`[ScreenShare] Remote screen share track removed (${shareId})`)
+
+      removeShareObject(shareId)
+
+      setActiveShares(prev => {
+        const next = new Map(prev)
+        next.delete(shareId)
+        return next
+      })
+    }
+
+    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed)
+    room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
+
+    // Watch for screen share rects removed by remote canvas sync
+    // (e.g., another peer relayed the removal before LiveKit/Socket events arrived)
+    const onObjectRemoved = ({ target }) => {
+      if (target?._evoScreenShare && target._evoShareId) {
+        removeScreenShareOverlay(target._evoShareId)
+      }
+    }
+    fabricCanvas.on('object:removed', onObjectRemoved)
 
     return () => {
-      window.removeEventListener('evodraw:remote_video_track', handleRemoteVideoTrack)
+      room.off(RoomEvent.TrackSubscribed, handleTrackSubscribed)
+      room.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed)
+      fabricCanvas.off('object:removed', onObjectRemoved)
     }
-  }, [fabricCanvas, screenShareLayer, activeShares, setupOverlay])
-
-  // Retry pending video tracks when activeShares updates
-  useEffect(() => {
-    if (!fabricCanvas || !screenShareLayer || activeShares.size === 0) return
-
-    for (const [key, videoEl] of videoElementsRef.current.entries()) {
-      if (!key.startsWith('pending-')) continue
-
-      const socketId = videoEl._pendingSocketId
-      let matchedShareId = null
-      let matchedUsername = null
-      for (const [shareId, info] of activeShares.entries()) {
-        if (info.socketId === socketId) {
-          matchedShareId = shareId
-          matchedUsername = info.username
-          break
-        }
-      }
-
-      if (!matchedShareId || proxyRectsRef.current.has(matchedShareId)) continue
-
-      // Move from pending to real
-      videoElementsRef.current.delete(key)
-
-      videoEl.onloadedmetadata = () => {
-        videoEl.play()
-        setupOverlay(videoEl, matchedShareId, matchedUsername)
-      }
-
-      // If already loaded
-      if (videoEl.readyState >= 2) {
-        setupOverlay(videoEl, matchedShareId, matchedUsername)
-      }
-    }
-  }, [fabricCanvas, screenShareLayer, activeShares, setupOverlay])
-
-  // Handle new peer connections: add local screen tracks if sharing
-  useEffect(() => {
-    const handlePeerCreated = (e) => {
-      const { pc } = e.detail
-      if (!localStreamRef.current) return
-
-      const videoTrack = localStreamRef.current.getVideoTracks()[0]
-      const audioTrack = localStreamRef.current.getAudioTracks()[0]
-      if (!videoTrack) return
-
-      try {
-        pc.addTrack(videoTrack, localStreamRef.current)
-        if (audioTrack) {
-          pc.addTrack(audioTrack, localStreamRef.current)
-        }
-      } catch (err) {
-        console.error('[ScreenShare] Failed to add track to new peer', err)
-      }
-    }
-
-    window.addEventListener('evodraw:peer_created', handlePeerCreated)
-    return () => {
-      window.removeEventListener('evodraw:peer_created', handlePeerCreated)
-    }
-  }, [])
+  }, [room, fabricCanvas, screenShareLayer, setupOverlay, removeShareObject])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -446,7 +409,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
         if (videoEl.parentNode) videoEl.parentNode.removeChild(videoEl)
       }
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     isSharing,

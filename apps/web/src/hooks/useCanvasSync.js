@@ -57,7 +57,7 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
 
     // ── Peer-to-peer fallback (secondary) ──
     const onStateRequest = ({ requesterId }) => {
-      const snapshot = serializeCanvas(canvas)
+      const snapshot = serializeCanvas(canvas, { includeScreenShares: true })
       snapshot.bgColor = bgStateRef.current.canvasBgColor || null
       snapshot.bgId = bgStateRef.current.canvasBgId || 'default'
       socket.emit('canvas_state_response', { requesterId, snapshot })

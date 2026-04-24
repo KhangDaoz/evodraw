@@ -40,6 +40,36 @@ export default function Toolbar({
   const [showScreenOptions, setShowScreenOptions] = useState(false)
   const [lastUsedShape, setLastUsedShape] = useState('rectangle')
 
+  // Custom-color palette, persisted like Miro / MS Paint so users keep their
+  // brand colors across sessions. Lifted here (not in PenOptionsPopup) so the
+  // list survives popup close/re-open without re-reading localStorage.
+  const [customColors, setCustomColors] = useState(() => {
+    try {
+      const raw = localStorage.getItem('evodraw_custom_colors')
+      const parsed = raw ? JSON.parse(raw) : []
+      return Array.isArray(parsed) ? parsed : []
+    } catch { return [] }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('evodraw_custom_colors', JSON.stringify(customColors))
+    } catch { /* quota / disabled — ignore */ }
+  }, [customColors])
+
+  const addCustomColor = (hex) => {
+    if (!hex) return
+    const normalized = hex.toLowerCase()
+    setCustomColors(prev => {
+      const without = prev.filter(c => c.toLowerCase() !== normalized)
+      return [normalized, ...without].slice(0, 10)
+    })
+  }
+
+  const removeCustomColor = (hex) => {
+    setCustomColors(prev => prev.filter(c => c.toLowerCase() !== hex.toLowerCase()))
+  }
+
   const isShapeActive = shapeTools.some(t => t.id === activeTool)
   const currentShapeId = isShapeActive ? activeTool : lastUsedShape
   const currentShapeTool = shapeTools.find(t => t.id === currentShapeId)
@@ -82,13 +112,17 @@ export default function Toolbar({
                 setShowScreenOptions(false)
               } else {
                 setShowOptions(!showOptions)
-                if (!showOptions) setShowScreenOptions(false)
+                if (!showOptions) {
+                  setShowScreenOptions(false)
+                }
               }
             }}
             onDoubleClick={(e) => {
               e.stopPropagation()
               setShowOptions(!showOptions)
-              if (!showOptions) setShowScreenOptions(false)
+              if (!showOptions) {
+                setShowScreenOptions(false)
+              }
             }}
             title="Pen (Click again for options)"
           >
@@ -113,6 +147,9 @@ export default function Toolbar({
               onStyleChange={onStyleChange}
               activeTool={activeTool}
               onToolSelect={onToolSelect}
+              customColors={customColors}
+              onAddCustomColor={addCustomColor}
+              onRemoveCustomColor={removeCustomColor}
             />
           )}
         </div>
@@ -149,7 +186,9 @@ export default function Toolbar({
             onDoubleClick={(e) => {
               e.stopPropagation()
               setShowShapeOptions(!showShapeOptions)
-              if (!showShapeOptions) setShowScreenOptions(false)
+              if (!showShapeOptions) {
+                setShowScreenOptions(false)
+              }
             }}
             title="Shapes"
           >

@@ -16,12 +16,7 @@ export default function BottomBar() {
 
   return (
     <div className="bottom-bar">
-      {/* Color swatch */}
-      <div className="color-swatch" title="Current color">
-        <div className="color-fill" />
-      </div>
-
-      {/* Zoom & undo/redo */}
+      {/* Zoom controls */}
       <div className="zoom-controls">
         <button title="Zoom out" onClick={handleZoomOut}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -41,20 +36,6 @@ export default function BottomBar() {
         </button>
 
         <span className="separator" />
-
-        <button title="Undo">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="4 6 2 8 4 10" />
-            <path d="M2 8h8a4 4 0 0 1 0 8H8" />
-          </svg>
-        </button>
-
-        <button title="Redo">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="12 6 14 8 12 10" />
-            <path d="M14 8H6a4 4 0 0 0 0 8h2" />
-          </svg>
-        </button>
       </div>
 
       {/* Help */}

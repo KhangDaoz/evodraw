@@ -1,6 +1,7 @@
 import express from 'express';
 import { createRoom, joinRoom, updateRoom } from '../controllers/room.controller.js';
 import { validateRoom, validateUpdateRoom } from '../middlewares/room.middleware.js';
+import { validateToken } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
 
@@ -11,6 +12,6 @@ router.post('/', createRoom);
 router.post('/join', validateRoom, joinRoom);
 
 // PUT /api/rooms/update - Update room data
-router.put('/update', validateRoom, validateUpdateRoom, updateRoom);
+router.put('/update', validateToken, validateRoom, validateUpdateRoom, updateRoom);
 
 export default router;

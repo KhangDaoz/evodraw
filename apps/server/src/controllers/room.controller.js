@@ -1,8 +1,13 @@
 import { createRoomService, getRoom, updateRoomService } from '../services/room.service.js';
+import { generateRoomToken } from '../services/token.service.js';
 
 export async function createRoom(req, res) {
     try {
         const result = await createRoomService();
+
+        const token = generateRoomToken(result._id, 'creator');
+
+        res.set('Authorization', `Bearer ${token}`);
 
         res.status(201).json({
             success: true,
@@ -26,6 +31,10 @@ export async function joinRoom(req, res) {
     try {
         const { code, passcode } = req.body || {};
         const room = await getRoom({ code, passcode });
+
+        const token = generateRoomToken(room._id, 'member');
+
+        res.set('Authorization', `Bearer ${token}`);
 
         res.status(200).json({
             success: true,

@@ -84,10 +84,10 @@ export default function LandingPage() {
 
   return (
     <div className="room-page" onClick={handleCanvasClick}>
-      <Canvas 
+      <Canvas
         activeTool={activeTool}
-        strokeColor={strokeColor} 
-        strokeWidth={strokeWidth} 
+        strokeColor={strokeColor}
+        strokeWidth={strokeWidth}
       />
 
       <Toolbar

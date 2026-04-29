@@ -171,7 +171,7 @@ Updated direction:
 - JWT must include at least: roomId, role, tokenVersion, iat, exp.
 - Never include passcode in JWT payload.
 Where to edit:
-- apps/server/src/controllers/room.controller.js
+- apps/server/src/controllers/room.controller.js -- done
 - apps/server/src/services/room.service.js
 
 2. Enforce JWT on Socket.IO connection and room-scoped events
@@ -276,17 +276,17 @@ Implementation note:
 
 ## 5. Technical Checklist
 
-- [ ] Add room access JWT issuer after successful join REST
+- [x] Add room access JWT issuer after successful join REST
 - [ ] Add JWT verify middleware for REST protected endpoints
-- [ ] Add JWT verify at socket handshake and store claims in socket.data.auth
-- [ ] Add helper ensureAuthorizedRoom(socket, roomId)
-- [ ] Apply helper to draw.handler events
-- [ ] Apply helper to chat.handler events
-- [ ] Apply helper to screen.handler events
-- [ ] Validate update_username and leave_room using canonical roomId from auth context
-- [ ] Remove service behavior that skips passcode when passcode is empty
-- [ ] Create dedicated internal service for trusted member operations if needed
-- [ ] Gate livekit:get-token by verified room membership and room match
+- [x] Add JWT verify at socket handshake and store claims in socket.data.auth
+- [x] Add helper ensureAuthorizedRoom(socket, roomId) (moved to utils/guard.js)
+- [x] Apply helper to draw.handler events
+- [x] Apply helper to chat.handler events
+- [x] Apply helper to screen.handler events
+- [x] Validate update_username and leave_room using canonical roomId from auth context
+- [x] Remove service behavior that skips passcode when passcode is empty
+- [x] Create dedicated internal service for trusted member operations if needed
+- [x] Gate livekit:get-token by verified room membership and room match
 - [ ] Add REST rate limit for /api/rooms/join
 - [ ] Add socket join attempt throttling
 - [ ] Upgrade passcode generation to crypto-grade and increase length
@@ -339,3 +339,10 @@ Security baseline is acceptable when all points below are true:
 
 - If product needs high security, move away from shared passcode model to account-based membership with per-user authorization.
 - If product needs anonymous flow, keep passcode but bind successful join to short-lived JWT/session token and enforce on all APIs/sockets.
+
+## 9. Implementation Changelog
+
+**Phase 1 & 2 Completed (2026-04-30):**
+- **Differences from original plan:** During testing, we found a bug where `generateRoomToken` used `result._id` (MongoDB ObjectId) as `roomId` instead of `result.code` (the 6-character room code). Because the frontend joins socket events using the 6-character `roomCode`, the `ensureAuthorizedRoom` helper failed to match them. This was fixed by updating `apps/server/src/controllers/room.controller.js` to correctly encode `result.code` into the JWT token.
+- **Structural update:** `guard.js` helper was moved from `apps/server/src/sockets/guard.js` to `apps/server/src/utils/guard.js` for better project structure and reusability.
+- All socket events (draw, chat, screen, room updates) are now securely guarded against forged `roomId` payloads.

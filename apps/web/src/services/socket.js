@@ -7,12 +7,17 @@ let socket = null
 export function connectSocket() {
   if (socket?.connected) return socket
 
+  const token = localStorage.getItem('token')
+
   socket = io(SERVER_URL, {
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
     timeout: 10000,
+    auth: {
+      token
+    }
   })
 
   return socket

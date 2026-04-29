@@ -12,6 +12,6 @@ router.post('/', createRoom);
 router.post('/join', validateRoom, joinRoom);
 
 // PUT /api/rooms/update - Update room data
-router.put('/update', validateToken, validateRoom, validateUpdateRoom, updateRoom);
+router.put('/update', validateToken, validateUpdateRoom, updateRoom);
 
 export default router;

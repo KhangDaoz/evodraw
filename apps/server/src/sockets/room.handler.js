@@ -1,6 +1,7 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
 import Room from '../models/Room.js';
 import bcrypt from 'bcrypt';
+import { ensureAuthorizedRoom } from '../utils/guard.js';
 
 async function getRoomUsers(io, roomId) {
     try {
@@ -22,6 +23,7 @@ async function broadcastRoomUsers(io, roomId) {
 
 export const registerRoomHandlers = (io, socket) => {
     socket.on('join_room', async (payload) => {
+
         const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : '';
         const username = typeof payload?.username === 'string' ? payload.username.trim() : '';
         const passcode = typeof payload?.passcode === 'string' ? payload.passcode.trim() : '';
@@ -56,20 +58,22 @@ export const registerRoomHandlers = (io, socket) => {
 
     socket.on('update_username', ({ roomId, newUsername }) => {
         if (!roomId || !newUsername) return;
-        
+        try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
+
         const oldUsername = socket.data.username;
         socket.data.username = newUsername;
-        
+
         console.log(`User ${oldUsername} changed name to ${newUsername} in room ${roomId}`);
-        
+
         // Broadcast the new name to others
         socket.to(roomId).emit('user_name_changed', { socketId: socket.id, oldUsername, newUsername });
-        
+
         // Broadcast updated user list
         broadcastRoomUsers(io, roomId);
     });
 
     socket.on('leave_room', ({ roomId, username }) => {
+        try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
         socket.leave(roomId);
         socket.data.roomId = null;
 

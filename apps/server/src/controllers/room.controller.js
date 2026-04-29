@@ -5,7 +5,7 @@ export async function createRoom(req, res) {
     try {
         const result = await createRoomService();
 
-        const token = generateRoomToken(result._id, 'creator');
+        const token = generateRoomToken(result.code, 'creator');
 
         res.set('Authorization', `Bearer ${token}`);
 
@@ -32,7 +32,7 @@ export async function joinRoom(req, res) {
         const { code, passcode } = req.body || {};
         const room = await getRoom({ code, passcode });
 
-        const token = generateRoomToken(room._id, 'member');
+        const token = generateRoomToken(room.code, 'member');
 
         res.set('Authorization', `Bearer ${token}`);
 
@@ -52,8 +52,10 @@ export async function joinRoom(req, res) {
 
 export async function updateRoom(req, res) {
     try {
-        const { code, passcode, roomVersion, elements, appState, status } = req.body || {};
-        await updateRoomService({ code, passcode, roomVersion, elements, appState, status });
+        const { roomVersion, elements, appState, status } = req.body || {};
+        // Use roomId from the verified token instead of the request body
+        const code = req.roomId;
+        await updateRoomService({ code, roomVersion, elements, appState, status });
 
         res.status(200).json({
             success: true,

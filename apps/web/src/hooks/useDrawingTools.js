@@ -123,9 +123,13 @@ export default function useDrawingTools(
     }
 
     // Erase topmost object under cursor (per-pixel stroke detection)
+    // Images (_evoImage), Text ('i-text'), and screen shares (_evoScreenShare) are immune to eraser.
+    // Images and Text can only be deleted via keyboard Delete/Backspace while selected.
     const eraseAt = (o) => {
       if (o.target) {
         if (o.target._evoScreenShare) return // screen shares are not erasable
+        if (o.target._evoImage) return        // images are not erasable by eraser
+        if (o.target.type === 'i-text') return // text is not erasable by eraser
         fabricCanvas.remove(o.target)
         fabricCanvas.requestRenderAll()
       }
@@ -347,10 +351,43 @@ export default function useDrawingTools(
     fabricCanvas.on('mouse:move', onMouseMove)
     fabricCanvas.on('mouse:up', onMouseUp)
 
+    // ─── KEYBOARD DELETE ───
+    // Delete/Backspace removes the currently selected object(s).
+    // This is the ONLY way to delete images on the canvas.
+    const onKeyDown = (e) => {
+      // Don't trigger when typing in inputs or editing text on canvas
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return
+      // Don't trigger when a Fabric IText is being edited
+      const activeObj = fabricCanvas.getActiveObject()
+      if (activeObj && activeObj.type === 'i-text' && activeObj.isEditing) return
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        if (!activeObj) return
+
+        // Handle ActiveSelection (multiple selected objects)
+        if (activeObj.type === 'activeSelection' || activeObj.type === 'activeselection') {
+          const objects = activeObj.getObjects().slice() // copy array
+          fabricCanvas.discardActiveObject()
+          objects.forEach(obj => {
+            if (!obj._evoScreenShare) fabricCanvas.remove(obj)
+          })
+        } else {
+          if (!activeObj._evoScreenShare) {
+            fabricCanvas.discardActiveObject()
+            fabricCanvas.remove(activeObj)
+          }
+        }
+        fabricCanvas.requestRenderAll()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+
     return () => {
       fabricCanvas.off('mouse:down', onMouseDown)
       fabricCanvas.off('mouse:move', onMouseMove)
       fabricCanvas.off('mouse:up', onMouseUp)
+      window.removeEventListener('keydown', onKeyDown)
     }
   }, [
     fabricCanvas,

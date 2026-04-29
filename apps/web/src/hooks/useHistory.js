@@ -25,7 +25,7 @@ export default function useHistory(canvas, syncState) {
 
     const onAdded = ({ target }) => {
       // Ignore intermediate components of complex shapes that are still drawing
-      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare) return
+      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading) return
       
       // Ensure target has an ID if another listener hasn't added it yet
       if (!target._evoId) {
@@ -35,28 +35,28 @@ export default function useHistory(canvas, syncState) {
       saveState({
         type: 'add',
         id: target._evoId,
-        object: { ...target.toJSON(['_evoId']), _evoId: target._evoId } // Store json and id
+        object: { ...target.toJSON(['_evoId', '_evoImage']), _evoId: target._evoId, _evoImage: target._evoImage || false }
       })
     }
 
     const onRemoved = ({ target }) => {
-      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare) return
+      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading) return
       saveState({
         type: 'remove',
         id: target._evoId,
-        object: { ...target.toJSON(['_evoId']), _evoId: target._evoId }
+        object: { ...target.toJSON(['_evoId', '_evoImage']), _evoId: target._evoId, _evoImage: target._evoImage || false }
       })
     }
 
     const onModified = ({ target }) => {
-      if (shouldIgnore() || target._evoScreenShare) return
+      if (shouldIgnore() || target._evoScreenShare || target._evoUploading) return
       const prevState = dragState.current
       if (prevState) {
         saveState({
           type: 'modify',
           id: target._evoId || prevState._evoId,
           prevState: prevState,
-          newState: { ...target.toJSON(['_evoId']), _evoId: target._evoId }
+          newState: { ...target.toJSON(['_evoId', '_evoImage']), _evoId: target._evoId, _evoImage: target._evoImage || false }
         })
       }
       dragState.current = null
@@ -65,9 +65,9 @@ export default function useHistory(canvas, syncState) {
 
     // Capture state before modification begins to save the 'before' state
     const onBeforeModify = (e) => {
-      if (shouldIgnore() || isDragging.current || !e.target || e.target._evoScreenShare) return
+      if (shouldIgnore() || isDragging.current || !e.target || e.target._evoScreenShare || e.target._evoUploading) return
       isDragging.current = true
-      dragState.current = { ...e.target.toJSON(['_evoId']), _evoId: e.target._evoId }
+      dragState.current = { ...e.target.toJSON(['_evoId', '_evoImage']), _evoId: e.target._evoId, _evoImage: e.target._evoImage || false }
     }
 
     canvas.on('object:added', onAdded)
@@ -115,6 +115,7 @@ export default function useHistory(canvas, syncState) {
         } else {
           const [obj] = await fabric.util.enlivenObjects([op.object])
           if (op.object._evoId) obj._evoId = op.object._evoId
+          if (op.object._evoImage) obj._evoImage = true
           canvas.add(obj)
           // canvas.fire('object:added', { target: obj }) is fired automatically by canvas.add
         }
@@ -123,6 +124,7 @@ export default function useHistory(canvas, syncState) {
         if (isUndo) {
           const [obj] = await fabric.util.enlivenObjects([op.object])
           if (op.object._evoId) obj._evoId = op.object._evoId
+          if (op.object._evoImage) obj._evoImage = true
           canvas.add(obj)
         } else {
           const target = findById(op.id)

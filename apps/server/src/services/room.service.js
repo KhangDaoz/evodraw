@@ -98,7 +98,7 @@ export async function updateRoomService({ code, roomVersion, elements, appState,
 		throw error;
 	}
 
-	if (roomVersion === undefined && roomVersion <= room.roomVersion) {
+	if (roomVersion !== undefined && roomVersion <= room.roomVersion) {
 		const error = new Error('Room version is outdated. Please refresh to get the latest room.');
 		error.statusCode = 400;
 		throw error;

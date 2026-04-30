@@ -1,7 +1,7 @@
 import * as fabric from 'fabric'
 
 // ── Versioning constants ──
-const CUSTOM_PROPS = ['_evoId', '_evoVersion', '_evoNonce', '_evoScreenShare', '_evoShareId', '_evoShareUser', '_evoShareColor']
+const CUSTOM_PROPS = ['_evoId', '_evoVersion', '_evoNonce', '_evoScreenShare', '_evoShareId', '_evoShareUser', '_evoShareColor', '_evoImage']
 
 // Stable unique ID for every Fabric object on this canvas
 let _idCounter = 0
@@ -76,6 +76,8 @@ async function deserializeObject(json) {
   if (json._evoShareId) obj._evoShareId = json._evoShareId
   if (json._evoShareUser) obj._evoShareUser = json._evoShareUser
   if (json._evoShareColor) obj._evoShareColor = json._evoShareColor
+  // Restore image metadata (eraser-immune flag)
+  if (json._evoImage) obj._evoImage = true
   return obj
 }
 
@@ -96,7 +98,7 @@ function findById(canvas, evoId) {
 export function attachSerializer(canvas, onOperation, state) {
   const onAdded = ({ target }) => {
     if (state._applying) return
-    if (target._evoDrawing) return // skip in-progress shape drawing
+    if (target._evoDrawing || target._evoUploading) return // skip in-progress shape drawing and uploading images
     bumpVersion(target)
     onOperation({
       type: 'object:added',
@@ -106,6 +108,7 @@ export function attachSerializer(canvas, onOperation, state) {
 
   const onModified = ({ target }) => {
     if (state._applying) return
+    if (target._evoDrawing || target._evoUploading) return // skip
     bumpVersion(target)
     onOperation({
       type: 'object:modified',
@@ -116,7 +119,7 @@ export function attachSerializer(canvas, onOperation, state) {
 
   const onRemoved = ({ target }) => {
     if (state._applying) return
-    if (target._evoDrawing) return // skip temp arrow parts
+    if (target._evoDrawing || target._evoUploading) return // skip temp arrow parts and uploading images
     onOperation({
       type: 'object:removed',
       id: ensureId(target),
@@ -193,7 +196,7 @@ export async function applyRemoteOp(canvas, op, state) {
  */
 export function serializeCanvas(canvas, { includeScreenShares = false } = {}) {
   const objects = canvas.getObjects()
-    .filter(obj => includeScreenShares || !obj._evoScreenShare)
+    .filter(obj => (includeScreenShares || !obj._evoScreenShare) && !obj._evoUploading)
     .map(serializeObject)
   return { objects }
 }

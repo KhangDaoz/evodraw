@@ -47,11 +47,14 @@ export function shouldAcceptRemote(local, remote) {
  * Compute a scene version number (sum of all element versions).
  * Used as a dirty-flag for snapshot persistence.
  */
+export function incrementSceneVersion(canvas) {
+  if (!canvas) return
+  canvas._evoSceneVersion = (canvas._evoSceneVersion || 0) + 1
+}
+
 export function getSceneVersion(canvas) {
   if (!canvas) return 0
-  return canvas.getObjects().reduce((sum, obj) => {
-    return sum + (typeof obj._evoVersion === 'number' ? obj._evoVersion : 0)
-  }, 0)
+  return typeof canvas._evoSceneVersion === 'number' ? canvas._evoSceneVersion : 0
 }
 
 // Serialize a single Fabric object → plain JSON payload (with version metadata)
@@ -100,6 +103,8 @@ export function attachSerializer(canvas, onOperation, state) {
     if (state._applying) return
     if (target._evoDrawing || target._evoUploading) return // skip in-progress shape drawing and uploading images
     bumpVersion(target)
+    incrementSceneVersion(canvas)
+    canvas._evoIsDirty = true
     onOperation({
       type: 'object:added',
       object: serializeObject(target),
@@ -110,6 +115,8 @@ export function attachSerializer(canvas, onOperation, state) {
     if (state._applying) return
     if (target._evoDrawing || target._evoUploading) return // skip
     bumpVersion(target)
+    incrementSceneVersion(canvas)
+    canvas._evoIsDirty = true
     onOperation({
       type: 'object:modified',
       id: ensureId(target),
@@ -120,6 +127,8 @@ export function attachSerializer(canvas, onOperation, state) {
   const onRemoved = ({ target }) => {
     if (state._applying) return
     if (target._evoDrawing || target._evoUploading) return // skip temp arrow parts and uploading images
+    incrementSceneVersion(canvas)
+    canvas._evoIsDirty = true
     onOperation({
       type: 'object:removed',
       id: ensureId(target),
@@ -143,6 +152,7 @@ export function attachSerializer(canvas, onOperation, state) {
  */
 export async function applyRemoteOp(canvas, op, state) {
   state._applying = true
+  let applied = false
   try {
     switch (op.type) {
       case 'object:added': {
@@ -155,11 +165,13 @@ export async function applyRemoteOp(canvas, op, state) {
             existing._evoVersion = op.object._evoVersion
             existing._evoNonce = op.object._evoNonce
             existing.setCoords()
+            applied = true
           }
           break
         }
         const obj = await deserializeObject(op.object)
         canvas.add(obj)
+        applied = true
         break
       }
 
@@ -173,6 +185,7 @@ export async function applyRemoteOp(canvas, op, state) {
         target._evoVersion = op.object._evoVersion
         target._evoNonce = op.object._evoNonce
         target.setCoords()
+        applied = true
         break
       }
 
@@ -180,11 +193,15 @@ export async function applyRemoteOp(canvas, op, state) {
         const target = findById(canvas, op.id)
         if (!target) break
         canvas.remove(target)
+        applied = true
         break
       }
     }
 
-    canvas.requestRenderAll()
+    if (applied) {
+      incrementSceneVersion(canvas)
+      canvas.requestRenderAll()
+    }
   } finally {
     state._applying = false
   }
@@ -198,7 +215,7 @@ export function serializeCanvas(canvas, { includeScreenShares = false } = {}) {
   const objects = canvas.getObjects()
     .filter(obj => (includeScreenShares || !obj._evoScreenShare) && !obj._evoUploading)
     .map(serializeObject)
-  return { objects }
+  return { objects, sceneVersion: getSceneVersion(canvas) }
 }
 
 /**
@@ -212,6 +229,8 @@ export async function loadCanvasSnapshot(canvas, snapshot, state) {
       const obj = await deserializeObject(json)
       canvas.add(obj)
     }
+    canvas._evoSceneVersion = typeof snapshot.sceneVersion === 'number' ? snapshot.sceneVersion : 0
+    canvas._evoIsDirty = false
     canvas.requestRenderAll()
   } finally {
     state._applying = false

@@ -47,9 +47,9 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
     // ── Server snapshot recovery (primary) ──
     const onSnapshotLoaded = async ({ elements, sceneVersion }) => {
       if (snapshotLoadedRef.current) return // Already loaded, skip
-      if (elements && elements.length > 0) {
+      if (elements) {
         snapshotLoadedRef.current = true
-        await loadCanvasSnapshot(canvas, { objects: elements }, syncState.current)
+        await loadCanvasSnapshot(canvas, { objects: elements, sceneVersion }, syncState.current)
         lastPushedVersionRef.current = sceneVersion || 0
         console.log(`[Sync] Loaded server snapshot (v${sceneVersion}, ${elements.length} elements)`)
       }
@@ -97,11 +97,14 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
     // ── Periodic snapshot push (dirty flag) ──
     const pushInterval = setInterval(() => {
       if (!canvas) return
+      if (!canvas._evoIsDirty) return
+      
       const currentVersion = getSceneVersion(canvas)
       if (currentVersion > 0 && currentVersion !== lastPushedVersionRef.current) {
         const { objects } = serializeCanvas(canvas)
         socket.emit('save_snapshot', { roomId, elements: objects, sceneVersion: currentVersion })
         lastPushedVersionRef.current = currentVersion
+        canvas._evoIsDirty = false
         console.log(`[Sync] Pushed snapshot (v${currentVersion}, ${objects.length} elements)`)
       }
     }, SNAPSHOT_PUSH_INTERVAL_MS)

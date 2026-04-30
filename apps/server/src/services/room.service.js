@@ -38,11 +38,11 @@ export async function createRoomService() {
 	};
 }
 
-export async function getRoom({ code, passcode }) {
-	const isEmptyPasscode = typeof passcode === 'string' && passcode.trim() === '';
+export async function getRoom({ code, passcode, skipPasscodeCheck = false }) {
 	const normalizedCode = String(code || '').trim().toUpperCase();
 
 	if (!normalizedCode) {
+		if (skipPasscodeCheck) return null;
 		const error = new Error('Invalid room code or passcode.');
 		error.statusCode = 401;
 		throw error;
@@ -53,12 +53,13 @@ export async function getRoom({ code, passcode }) {
 	});
 
 	if (!room) {
+		if (skipPasscodeCheck) return null;
 		const error = new Error('Invalid room code or passcode.');
 		error.statusCode = 401;
 		throw error;
 	}
 
-	if (!isEmptyPasscode) {
+	if (!skipPasscodeCheck) {
 		const hasPasscode = typeof passcode === 'string' && passcode.length > 0;
 		const isValidPasscode = hasPasscode && await bcrypt.compare(passcode, room.passcode);
 
@@ -78,13 +79,12 @@ export async function getRoom({ code, passcode }) {
 	return safeRoom;
 }
 
-export async function updateRoomService({ code, passcode, roomVersion, elements, appState, status }) {
-	const isEmptyPasscode = typeof passcode === 'string' && passcode.trim() === '';
+export async function updateRoomService({ code, roomVersion, elements, appState, status }) {
 	const normalizedCode = String(code || '').trim().toUpperCase();
 
 	if (!normalizedCode) {
-		const error = new Error('Invalid room code or passcode.');
-		error.statusCode = 401;
+		const error = new Error('Invalid room code.');
+		error.statusCode = 400;
 		throw error;
 	}
 
@@ -93,23 +93,12 @@ export async function updateRoomService({ code, passcode, roomVersion, elements,
 	});
 
 	if (!room) {
-		const error = new Error('Invalid room code or passcode.');
-		error.statusCode = 401;
+		const error = new Error('Room not found.');
+		error.statusCode = 404;
 		throw error;
 	}
 
-	if (!isEmptyPasscode) {
-		const hasPasscode = typeof passcode === 'string' && passcode.length > 0;
-		const isValidPasscode = hasPasscode && await bcrypt.compare(passcode, room.passcode);
-
-		if (!isValidPasscode) {
-			const error = new Error('Invalid room code or passcode.');
-			error.statusCode = 401;
-			throw error;
-		}
-	}
-
-	if (roomVersion === undefined || roomVersion <= room.roomVersion) {
+	if (roomVersion === undefined && roomVersion <= room.roomVersion) {
 		const error = new Error('Room version is outdated. Please refresh to get the latest room.');
 		error.statusCode = 400;
 		throw error;

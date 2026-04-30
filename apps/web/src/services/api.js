@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || '/api'
+ const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 export async function createRoom() {
   const res = await fetch(`${BASE_URL}/rooms`, {
@@ -9,6 +9,11 @@ export async function createRoom() {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.message || 'Failed to create room')
+  }
+
+  const token = res.headers.get('Authorization')?.split(' ')[1]
+  if(token) {
+    localStorage.setItem('token', token)
   }
 
   return res.json()
@@ -26,6 +31,11 @@ export async function joinRoom(code, passcode) {
     throw new Error(body.message || 'Invalid room code or passcode')
   }
 
+  const token = res.headers.get('Authorization')?.split(' ')[1]
+  if(token) {
+    localStorage.setItem('token', token)
+  }
+
   return res.json()
 }
 
@@ -37,8 +47,15 @@ export async function uploadFile(roomId, file) {
   const formData = new FormData()
   formData.append('file', file)
 
+  const token = localStorage.getItem('token')
+  const headers = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   const res = await fetch(`${BASE_URL}/rooms/${roomId}/files`, {
     method: 'POST',
+    headers,
     body: formData,
   })
 
@@ -55,7 +72,15 @@ export async function uploadFile(roomId, file) {
  * Returns { success: true, data: [{ fileId, url, originalName, mimetype, size, createdAt }] }
  */
 export async function getFilesByRoom(roomId) {
-  const res = await fetch(`${BASE_URL}/rooms/${roomId}/files`)
+  const token = localStorage.getItem('token')
+  const headers = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  const res = await fetch(`${BASE_URL}/rooms/${roomId}/files`, {
+    headers
+  })
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

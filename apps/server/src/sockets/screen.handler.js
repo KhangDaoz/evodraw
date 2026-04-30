@@ -1,10 +1,12 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
+import { ensureAuthorizedRoom } from '../utils/guard.js';
 
 export const registerScreenShareHandlers = (io, socket) => {
     // Presenter starts sharing
     // Expected payload: { roomId: string, shareId: string }
     socket.on('screen:start', ({ roomId, shareId }) => {
         if (!roomId || !shareId) return;
+        try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
 
         const username = socket.data.username || 'Anonymous';
 
@@ -26,6 +28,7 @@ export const registerScreenShareHandlers = (io, socket) => {
     // Expected payload: { roomId: string, shareId: string }
     socket.on('screen:stop', ({ roomId, shareId }) => {
         if (!roomId || !shareId) return;
+        try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
 
         if (socket.data.shares) {
             socket.data.shares.delete(shareId);
@@ -40,6 +43,7 @@ export const registerScreenShareHandlers = (io, socket) => {
     // Late joiner requests active shares list
     socket.on('screen:get_active', async ({ roomId }) => {
         if (!roomId) return;
+        try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
 
         try {
             const sockets = await io.in(roomId).fetchSockets();

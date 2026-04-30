@@ -1,5 +1,6 @@
 import { AccessToken } from 'livekit-server-sdk';
 import { markRoomActivity } from '../utils/roomActivity.js';
+import { ensureAuthorizedRoom } from '../utils/guard.js';
 
 export const registerChatHandlers = (io, socket) => {
     // Text Chat Message Handler
@@ -10,6 +11,8 @@ export const registerChatHandlers = (io, socket) => {
             if (!roomId || !message) {
                 return;
             }
+
+            try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
 
             // Create a payload for broadcasting
             const payload = {
@@ -30,6 +33,11 @@ export const registerChatHandlers = (io, socket) => {
     // Clients request a JWT to connect to the LiveKit SFU for voice/video.
     socket.on('livekit:get-token', async ({ roomId, username }, callback) => {
         try {
+            try { ensureAuthorizedRoom(socket, roomId); } catch (e) {
+                if (callback) callback({ error: 'Unauthorized room access' });
+                return;
+            }
+
             const apiKey = process.env.LIVEKIT_API_KEY;
             const apiSecret = process.env.LIVEKIT_API_SECRET;
             const livekitUrl = process.env.LIVEKIT_URL;

@@ -12,6 +12,7 @@ body {
   height: 100vh;
   overflow: hidden;
   background: transparent;
+  pointer-events: none;
 }
 
 #draw-canvas {
@@ -22,6 +23,7 @@ body {
   height: 100%;
   /* Canvas trong suốt */
   background: transparent;
+  pointer-events: none; 
 }
 
 #overlay-indicator {

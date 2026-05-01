@@ -18,16 +18,46 @@ evodraw/
 │   │
 │   ├── desktop/                      # Electron - Người trình bày
 │   │   ├── src/
-│   │   │   ├── main/                 # Main process (Electron)
-│   │   │   │   ├── index.js          # Entry point chính
-│   │   │   │   ├── screenCapture.js  # Quay màn hình (desktopCapturer)
-│   │   │   │   └── ipc.js            # IPC handlers
-│   │   │   ├── renderer/             # Renderer process (UI)
+│   │   │   ├── main/                 # Main process (Node.js)
+│   │   │   │   ├── main.js           # Entry point
+│   │   │   │   ├── ipcHandlers/      # IPC handlers
+│   │   │   │   │   ├── fileHandler.js
+│   │   │   │   │   └── windowHandler.js
+│   │   │   │   ├── services/
+│   │   │   │   │   ├── windowService.js
+│   │   │   │   │   └── fileService.js
+│   │   │   │   └── utils/
+│   │   │   │       └── paths.js
+│   │   │   │
+│   │   │   ├── preload/              # Preload script (bridge)
+│   │   │   │   └── preload.js
+│   │   │   │
+│   │   │   ├── renderer/             # Renderer process (React)
+│   │   │   │   ├── renderer.js       # Entry point
+│   │   │   │   ├── App.jsx
 │   │   │   │   ├── components/
-│   │   │   │   ├── socket/           # Gửi tọa độ lên server
-│   │   │   │   └── App.jsx
-│   │   │   └── preload.js
-│   │   └── package.json
+│   │   │   │   ├── pages/
+│   │   │   │   ├── hooks/
+│   │   │   │   ├── services/
+│   │   │   │   ├── utils/
+│   │   │   │   └── styles/
+│   │   │   │       └── index.css
+│   │   │   │
+│   │   │   └── shared/               # Shared code
+│   │   │       ├── constants.js
+│   │   │       ├── types.js
+│   │   │       └── utils.js
+│   │   │
+│   │   ├── index.html                # Renderer HTML
+│   │   ├── package.json
+│   │   ├── forge.config.js
+│   │   ├── vite.main.config.mjs      # Main process config
+│   │   ├── vite.preload.config.mjs   # Preload config
+│   │   ├── vite.renderer.config.mjs  # Renderer config
+│   │   └── .vite/
+│   │       └── build/
+│   │           ├── main.js
+│   │           └── preload.js
 │   │
 │   └── server/                       # Node.js + Express + Socket.io
 │       ├── src/
@@ -54,6 +84,49 @@ evodraw/
 ├── package.json                      # Root - chạy script toàn bộ
 └── README.md
 ```
+
+## Chi tiết: Desktop App Structure
+
+### `apps/desktop/src/main/` - Main Process (Node.js)
+
+Entry point và logic nghiệp vụ của Electron chạy ở process chính:
+
+- **main.js** — Entry point khởi động cửa sổ Electron
+- **ipcHandlers/** — Xử lý IPC channels từ renderer:
+  - `fileHandler.js` — Handlers liên quan đến file
+  - `windowHandler.js` — Handlers liên quan đến cửa sổ
+- **services/** — Business logic services:
+  - `windowService.js` — Quản lý lifecycle cửa sổ
+  - `fileService.js` — Xử lý file I/O
+- **utils/** — Utility functions:
+  - `paths.js` — Quản lý đường dẫn ứng dụng
+
+### `apps/desktop/src/preload/` - Preload Script
+
+Cầu nối an toàn giữa main process và renderer process:
+
+- **preload.js** — Expose IPC channels an toàn qua `contextBridge`
+
+### `apps/desktop/src/renderer/` - Renderer Process (React)
+
+UI application chạy ở process renderer:
+
+- **renderer.js** — Entry point React
+- **App.jsx** — Root React component
+- **components/** — React components
+- **pages/** — Page components
+- **hooks/** — Custom React hooks
+- **services/** — API/service calls (socket.io, REST)
+- **utils/** — Helper functions
+- **styles/index.css** — Global styles
+
+### `apps/desktop/src/shared/` - Shared Code
+
+Code chia sẻ giữa main và renderer processes:
+
+- **constants.js** — Các hằng số (IPC channels, config)
+- **types.js** — Type definitions (JSDoc)
+- **utils.js** — Utility functions chung
 
 ## Cấu hình với npm workspace
 

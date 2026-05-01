@@ -29,7 +29,7 @@ export async function uploadFile(req, res, next) {
         }
 
         const type = await fileTypeFromBuffer(file.buffer);
-        const allowedMimes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf', 'image/svg+xml'];
+        const allowedMimes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf'];
 
         if (!type || !allowedMimes.includes(type.mime)) {
             return res.status(400).json({ success: false, error: 'Invalid file type detected.' });
@@ -61,7 +61,7 @@ export async function uploadFile(req, res, next) {
         await File.create({
             fileId,
             roomId: roomId.toUpperCase(),
-            mimeType: file.mimetype,
+            mimeType: type.mime,
             size: file.size,
             dataURL: url,
         });

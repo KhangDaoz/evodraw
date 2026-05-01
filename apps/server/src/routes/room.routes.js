@@ -2,11 +2,12 @@ import express from 'express';
 import { createRoom, joinRoom, updateRoom } from '../controllers/room.controller.js';
 import { validateRoom, validateUpdateRoom } from '../middlewares/room.middleware.js';
 import { validateToken } from '../middlewares/auth.middleware.js';
+import { createRoomLimiter } from '../middlewares/rateLimit.middleware.js';
 
 const router = express.Router();
 
 // POST /api/rooms - Create a new room
-router.post('/', createRoom);
+router.post('/', createRoomLimiter, createRoom);
 
 // POST /api/rooms/join - Join a room
 router.post('/join', validateRoom, joinRoom);

@@ -58,7 +58,7 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // routes
-app.use('/api/rooms', createRoomLimiter, roomRoutes);
+app.use('/api/rooms', roomRoutes);
 app.use('/api/rooms/:roomId/files', fileRoutes);
 
 app.get('/', (req, res) => {

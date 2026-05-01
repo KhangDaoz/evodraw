@@ -22,10 +22,12 @@ const upload = multer({
 
 const router = Router({ mergeParams: true });
 
+const normalizeRoomId = (id) => String(id || '').trim().toUpperCase();
+
 // Protect all file routes with token validation and IDOR check
 router.use(validateToken);
 router.use((req, res, next) => {
-    if (req.roomId !== req.params.roomId) {
+    if (normalizeRoomId(req.roomId) !== normalizeRoomId(req.params.roomId)) {
         return res.status(403).json({ success: false, message: 'Forbidden: Access denied to this room.' });
     }
     next();

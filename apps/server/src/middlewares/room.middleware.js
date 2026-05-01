@@ -29,6 +29,13 @@ export function validateUpdateRoom(req, res, next) {
         });
     }
 
+    if (elements.length > 10000) {
+        return res.status(400).json({
+            success: false,
+            message: 'Too many elements. Maximum allowed is 10000.'
+        });
+    }
+
     if (typeof appState !== 'object' || appState === null) {
         return res.status(400).json({
             success: false,

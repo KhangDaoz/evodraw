@@ -46,7 +46,7 @@ const createWindow = () => {
 
   globalShortcut.register('CommandOrControl+Shift+D', () => {
     isDrawingMode = !isDrawingMode;
-    
+
     if (isDrawingMode) {
       mainWindow.setIgnoreMouseEvents(false);
     } else {
@@ -91,4 +91,5 @@ app.on('window-all-closed', () => {
 // unregister all shortcuts
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+});
 });

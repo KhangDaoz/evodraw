@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, globalShortcut } from 'electron';
+import { app, BrowserWindow, screen, globalShortcut, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
@@ -58,6 +58,11 @@ const createWindow = () => {
     console.log(`[Main] Drawing mode: ${isDrawingMode ? 'ON' : 'OFF'}`);
   });
 };
+
+// Handle IPC requests from preload
+ipcMain.handle('get-drawing-mode', () => {
+  return isDrawingMode;
+});
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.

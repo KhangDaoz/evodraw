@@ -9,7 +9,7 @@ import { initializeSockets } from './sockets/index.js';
 import roomRoutes from './routes/room.routes.js';
 import fileRoutes from './routes/file.routes.js';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import { globalLimiter, createRoomLimiter } from './middlewares/rateLimit.middleware.js';
 
 // cors configuration - allow localhost and any origins specified in .env
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(',').map(o => o.trim());
@@ -39,19 +39,6 @@ initializeSockets(io);
 
 // global middleware
 app.use(helmet());
-
-const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 500, // limit each IP to 500 requests per windowMs
-    message: { success: false, message: 'Too many requests, please try again later.' }
-});
-
-const createRoomLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 20, // limit each IP to 20 rooms per hour
-    message: { success: false, message: 'Too many rooms created, please try again later.' }
-});
-
 app.use('/api/', globalLimiter);
 
 app.use(cors({

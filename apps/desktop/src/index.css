@@ -23,7 +23,7 @@ body {
   height: 100%;
   /* Canvas trong suốt */
   background: transparent;
-  pointer-events: none; 
+  pointer-events: none;
 }
 
 #overlay-indicator {
@@ -36,15 +36,26 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: #fff;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
   z-index: 9999;
   user-select: none;
   pointer-events: none;
-  /* Hiệu ứng nhấp nháy nhẹ để dễ nhận biết */
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+/* Trạng thái mặc định: click-through */
+#overlay-indicator.mode-passthrough {
+  background: rgba(0, 0, 0, 0.5);
   animation: pulse 2s ease-in-out infinite;
+}
+
+/* Trạng thái vẽ: nổi bật */
+#overlay-indicator.mode-drawing {
+  background: rgba(255, 51, 102, 0.85);
+  border-color: rgba(255, 51, 102, 0.5);
+  animation: none;
 }
 
 @keyframes pulse {

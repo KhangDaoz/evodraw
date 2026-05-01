@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen } from 'electron';
+import { app, BrowserWindow, screen, globalShortcut } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
@@ -6,6 +6,8 @@ import started from 'electron-squirrel-startup';
 if (started) {
   app.quit();
 }
+
+let isDrawingMode = false;
 
 const createWindow = () => {
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -22,7 +24,7 @@ const createWindow = () => {
     skipTaskbar: true,
     hasShadow: false,
     resizable: false,
-    focusable: false,
+    focusable: true,
     fullscreenable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -42,8 +44,19 @@ const createWindow = () => {
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
   })
 
-  // Open the DevTools.
-  // mainWindow.webContents.openDevTools();
+  globalShortcut.register('CommandOrControl+Shift+D', () => {
+    isDrawingMode = !isDrawingMode;
+    
+    if (isDrawingMode) {
+      mainWindow.setIgnoreMouseEvents(false);
+    } else {
+      mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    }
+
+    // send to renderer to update UI/Canvas
+    mainWindow.webContents.send('drawing-mode-changed', isDrawingMode);
+    console.log(`[Main] Drawing mode: ${isDrawingMode ? 'ON' : 'OFF'}`);
+  });
 };
 
 // This method will be called when Electron has finished
@@ -70,5 +83,7 @@ app.on('window-all-closed', () => {
   }
 });
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.
+// unregister all shortcuts
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+});

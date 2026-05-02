@@ -8,6 +8,8 @@ import { initFirebase } from './config/firebase.js';
 import { initializeSockets } from './sockets/index.js';
 import roomRoutes from './routes/room.routes.js';
 import fileRoutes from './routes/file.routes.js';
+import helmet from 'helmet';
+import { globalLimiter, createRoomLimiter } from './middlewares/rateLimit.middleware.js';
 
 // cors configuration - allow localhost and any origins specified in .env
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(',').map(o => o.trim());
@@ -36,6 +38,9 @@ app.set('socketio', io);
 initializeSockets(io);
 
 // global middleware
+app.use(helmet());
+app.use('/api/', globalLimiter);
+
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin || ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
@@ -49,8 +54,8 @@ app.use(cors({
     exposedHeaders: ['Authorization']
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // routes
 app.use('/api/rooms', roomRoutes);

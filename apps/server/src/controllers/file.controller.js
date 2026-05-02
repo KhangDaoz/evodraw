@@ -1,6 +1,7 @@
 import { getBucket } from '../config/firebase.js';
 import File from '../models/File.js';
 import { randomUUID } from 'crypto';
+import { fileTypeFromBuffer } from 'file-type';
 
 /**
  * Upload a file to Firebase Storage and save metadata to MongoDB.
@@ -27,16 +28,23 @@ export async function uploadFile(req, res, next) {
             });
         }
 
+        const type = await fileTypeFromBuffer(file.buffer);
+        const allowedMimes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf'];
+
+        if (!type || !allowedMimes.includes(type.mime)) {
+            return res.status(400).json({ success: false, error: 'Invalid file type detected.' });
+        }
+
         // Generate unique file path in Firebase Storage
         const fileId = randomUUID();
-        const ext = file.originalname.split('.').pop() || 'bin';
+        const ext = type.ext || 'bin';
         const storagePath = `rooms/${roomId}/${fileId}.${ext}`;
 
         // Upload to Firebase Storage
         const bucketFile = bucket.file(storagePath);
         await bucketFile.save(file.buffer, {
             metadata: {
-                contentType: file.mimetype,
+                contentType: type.mime,
                 metadata: {
                     roomId,
                     originalName: file.originalname,
@@ -53,7 +61,7 @@ export async function uploadFile(req, res, next) {
         await File.create({
             fileId,
             roomId: roomId.toUpperCase(),
-            mimeType: file.mimetype,
+            mimeType: type.mime,
             size: file.size,
             dataURL: url,
         });

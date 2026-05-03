@@ -414,6 +414,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
   return {
     isSharing,
     activeShares,
+    localShareId: shareIdRef.current,
     startSharing,
     stopSharing,
     changeResolution,

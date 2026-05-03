@@ -1,0 +1,412 @@
+/* ── Reset ── */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  font-family: 'Segoe UI', -apple-system, sans-serif;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+/* ── Canvas ── */
+#overlay-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+}
+
+/* ── Mode Indicator ── */
+.mode-indicator {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(8px);
+}
+
+.mode-indicator.working {
+  background: rgba(34, 139, 34, 0.85);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(34, 139, 34, 0.3);
+}
+
+.mode-indicator.drawing {
+  background: rgba(224, 49, 49, 0.9);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(224, 49, 49, 0.4);
+}
+
+.mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Drawing Mode Border Glow ── */
+body.drawing-mode::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  border: 3px solid rgba(224, 49, 49, 0.6);
+  border-radius: 0;
+  animation: border-glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes border-glow {
+  from { border-color: rgba(224, 49, 49, 0.6); }
+  to { border-color: rgba(224, 49, 49, 0.2); }
+}
+
+/* ── Toolbar ── */
+.toolbar {
+  position: fixed;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border-radius: 12px;
+  background: rgba(30, 30, 30, 0.92);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toolbar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(20px);
+}
+
+.toolbar-drag-handle {
+  cursor: grab;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 10px;
+  letter-spacing: 2px;
+  padding: 2px 0 4px;
+  user-select: none;
+}
+
+.toolbar-drag-handle:active {
+  cursor: grabbing;
+}
+
+.toolbar-separator {
+  width: 24px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 2px 0;
+}
+
+/* ── Tool Buttons ── */
+.tool-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tool-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.tool-btn.active {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.2);
+}
+
+.tool-btn.exit-btn:hover {
+  background: rgba(224, 49, 49, 0.3);
+  color: #ff6b6b;
+}
+
+/* ── Color Picker ── */
+.color-picker-wrap, .width-picker-wrap {
+  position: relative;
+}
+
+.color-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: block;
+}
+
+.color-dropdown, .width-dropdown {
+  position: absolute;
+  right: 46px;
+  top: 0;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 300;
+}
+
+.color-dropdown.hidden, .width-dropdown.hidden {
+  display: none;
+}
+
+.color-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.color-preset {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.color-preset:hover {
+  transform: scale(1.15);
+}
+
+.color-preset.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+#custom-color {
+  width: 100%;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+}
+
+/* ── Width Dropdown ── */
+.width-dropdown {
+  min-width: 100px;
+}
+
+.width-opt {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: left;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.width-opt:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.width-opt.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Settings Modal ── */
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.settings-modal.hidden {
+  display: none;
+}
+
+.settings-content {
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 24px 28px;
+  min-width: 340px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  color: #fff;
+}
+
+.settings-content h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 18px;
+  color: #fff;
+}
+
+.setting-row {
+  margin-bottom: 14px;
+}
+
+.setting-row label {
+  display: block;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 6px;
+}
+
+.hotkey-capture {
+  display: flex;
+  gap: 8px;
+}
+
+.hotkey-capture input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 13px;
+  outline: none;
+}
+
+.hotkey-capture input:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.hotkey-capture button, .settings-content select {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-content select {
+  width: 100%;
+  padding: 6px 10px;
+}
+
+.settings-content input[type="color"] {
+  width: 100%;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+  justify-content: flex-end;
+}
+
+.btn-primary {
+  padding: 7px 18px;
+  border: none;
+  border-radius: 6px;
+  background: #e03131;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: #c92a2a;
+}
+
+.btn-secondary {
+  padding: 7px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Connection Status ── */
+.connection-status {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 16px;
+  background: rgba(30, 30, 30, 0.85);
+  backdrop-filter: blur(8px);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+
+.conn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #aaa;
+}
+
+.connection-status.connected .conn-dot {
+  background: #2f9e44;
+}
+
+.connection-status.connected .conn-text {
+  color: rgba(255, 255, 255, 0.7);
+}

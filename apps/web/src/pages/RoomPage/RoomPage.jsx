@@ -6,6 +6,7 @@ import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import useVoiceChat from '../../hooks/useVoiceChat'
 import useScreenShare from '../../hooks/useScreenShare'
 import useScreenShareControls from '../../hooks/useScreenShareControls'
+import useOverlayStrokes from '../../hooks/useOverlayStrokes'
 import { getSocket } from '../../services/socket'
 import Toolbar from '../../components/Toolbar/Toolbar'
 import BottomBar from '../../components/BottomBar/BottomBar'
@@ -35,6 +36,7 @@ export default function RoomPage() {
   const canvasRef = useRef(null)
   const chatPanelRef = useRef(null)
   const chatToggleBtnRef = useRef(null)
+  const hasLaunchedOverlay = useRef(false)
 
   // Canvas background: compute initial color based on theme
   const [canvasBgId, setCanvasBgId] = useState('default')
@@ -97,12 +99,31 @@ export default function RoomPage() {
   )
   const { isSharing, activeShares } = screenShareHook
 
+  // Overlay strokes
+  const { annotatingUser } = useOverlayStrokes(fabricCanvas, roomCode, isConnected)
+
   // Screen share UI controls (resolution, fps, audio)
   const {
     screenResolution, screenAudio, screenFps,
     handleToggle: handleScreenShareToggle,
     handleResolutionChange, handleFpsChange, handleToggleAudio,
   } = useScreenShareControls(screenShareHook)
+
+  // Auto-launch desktop overlay when screen sharing starts
+  useEffect(() => {
+    if (isSharing && screenShareHook.localShareId) {
+      if (!hasLaunchedOverlay.current) {
+        console.log('[RoomPage] Screen share detected, auto-launching desktop overlay')
+        const serverUrl = encodeURIComponent(import.meta.env.VITE_SERVER_URL || 'http://localhost:4000')
+        const link = `evodraw://overlay?room=${roomCode}&shareId=${screenShareHook.localShareId}&server=${serverUrl}&token=${passcode}&username=${encodeURIComponent(username)}`
+        
+        window.open(link, '_self')
+        hasLaunchedOverlay.current = true
+      }
+    } else if (!isSharing) {
+      hasLaunchedOverlay.current = false
+    }
+  }, [isSharing, screenShareHook.localShareId, roomCode, passcode, username])
 
   // Keep fabricCanvas and screenShareLayer in sync when canvas ref mounts
   useEffect(() => {
@@ -330,6 +351,30 @@ export default function RoomPage() {
             <span>Just now</span>
           </div>
           <div className="chat-toast-body">{toastMessage.text}</div>
+        </div>
+      )}
+
+      {/* Overlay Annotation Indicator */}
+      {annotatingUser && (
+        <div className="annotation-toast animate-fade-in" style={{
+          position: 'absolute',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(224, 49, 49, 0.9)',
+          color: 'white',
+          padding: '8px 16px',
+          borderRadius: '20px',
+          fontWeight: 'bold',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 1000,
+          pointerEvents: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <span style={{ fontSize: '1.2em' }}>✏️</span>
+          {annotatingUser} is annotating...
         </div>
       )}
 

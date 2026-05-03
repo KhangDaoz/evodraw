@@ -1,0 +1,27 @@
+{
+  "name": "evodraw-desktop",
+  "productName": "EvoDraw Desktop",
+  "version": "1.0.0",
+  "author": "EvoDraw Team",
+  "private": true,
+  "description": "EvoDraw screen share overlay — draw on your shared screen",
+  "main": ".vite/build/main.js",
+  "scripts": {
+    "start": "electron-forge start",
+    "dev": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
+  },
+  "dependencies": {
+    "electron-store": "^10.0.0",
+    "fabric": "^7.2.0",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.6.0",
+    "@electron-forge/maker-squirrel": "^7.6.0",
+    "@electron-forge/maker-zip": "^7.6.0",
+    "@electron-forge/plugin-vite": "^7.6.0",
+    "electron": "^33.4.0"
+  }
+}

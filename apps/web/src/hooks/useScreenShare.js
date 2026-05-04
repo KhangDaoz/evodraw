@@ -8,6 +8,8 @@ import {
   findScreenShareRect,
 } from '../utils/screenShareObject'
 
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000'
+
 /**
  * Screen share hook — handles both presenting and viewing.
  *
@@ -178,6 +180,21 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       const shareId = generateShareId()
       shareIdRef.current = shareId
       setIsSharing(true)
+
+      // ── Launch the desktop overlay via deep link ──
+      // Use a hidden iframe to open the protocol without navigating away from the web app.
+      // The desktop app runs independently and connects to the same LiveKit room + server.
+      const token = localStorage.getItem('token')
+      const deepLinkUrl = `evodraw://start?room=${encodeURIComponent(roomId)}&token=${encodeURIComponent(token || '')}&server=${encodeURIComponent(SERVER_URL)}&shareId=${encodeURIComponent(shareId)}&username=${encodeURIComponent(usernameRef.current)}`
+      console.log('[ScreenShare] Launching desktop overlay:', deepLinkUrl)
+
+      // Open without navigating away from the web app
+      const deepLinkAnchor = document.createElement('a')
+      deepLinkAnchor.href = deepLinkUrl
+      deepLinkAnchor.style.display = 'none'
+      document.body.appendChild(deepLinkAnchor)
+      deepLinkAnchor.click()
+      document.body.removeChild(deepLinkAnchor)
 
       // Publish video track to LiveKit (with shareId as track name for remote identification)
       try {

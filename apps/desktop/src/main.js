@@ -13,6 +13,8 @@ const Store = require('electron-store');
 
 // Handle Squirrel events (Windows installer)
 if (require('electron-squirrel-startup')) app.quit();
+// Squirrel launches the app once after install with this flag — don't open anything
+if (process.argv.includes('--squirrel-firstrun')) app.quit();
 
 const store = new Store({
   defaults: {
@@ -20,6 +22,8 @@ const store = new Store({
     defaultColor: '#e03131',
     defaultWidth: 4,
     toolbarPosition: 'right',
+    serverUrl: 'http://localhost:4000',
+    username: '',
   },
 });
 
@@ -46,7 +50,6 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', (_event, argv) => {
-    // Windows: deep link URL is the last argument
     const url = argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
     if (url) handleDeepLink(url);
     if (overlayWindow) {
@@ -67,7 +70,7 @@ function handleDeepLink(url) {
     const params = {
       room: parsed.searchParams.get('room'),
       token: parsed.searchParams.get('token'),
-      server: parsed.searchParams.get('server') || 'http://localhost:4000',
+      server: parsed.searchParams.get('server') || store.get('serverUrl', 'http://localhost:4000'),
       shareId: parsed.searchParams.get('shareId'),
       username: parsed.searchParams.get('username'),
     };
@@ -75,6 +78,7 @@ function handleDeepLink(url) {
     console.log('[Main] Deep link received:', params.room, params.shareId);
 
     if (overlayWindow && overlayWindow.webContents) {
+      overlayWindow.show();
       overlayWindow.webContents.send('deep-link', params);
     } else {
       pendingDeepLink = params;
@@ -102,6 +106,7 @@ function createOverlayWindow() {
     focusable: true,
     hasShadow: false,
     fullscreenable: false,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -109,15 +114,12 @@ function createOverlayWindow() {
     },
   });
 
-  // Start in working mode (click-through)
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
   isDrawingMode = false;
 
-  // Keep on top of other always-on-top windows
   overlayWindow.setAlwaysOnTop(true, 'screen-saver');
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-  // Vite dev server or built file
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     overlayWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
@@ -126,16 +128,10 @@ function createOverlayWindow() {
     );
   }
 
-  // Send screen dimensions to renderer
   overlayWindow.webContents.on('did-finish-load', () => {
     overlayWindow.webContents.send('screen-info', { width, height });
     overlayWindow.webContents.send('settings-loaded', store.store);
-
-    // Send pending deep link if we had one before window was ready
-    if (pendingDeepLink) {
-      overlayWindow.webContents.send('deep-link', pendingDeepLink);
-      pendingDeepLink = null;
-    }
+    // pendingDeepLink is NOT sent here; renderer fetches it via IPC on mount
   });
 }
 
@@ -153,6 +149,7 @@ function setDrawingMode(enabled) {
   }
 
   overlayWindow.webContents.send('mode-changed', enabled ? 'drawing' : 'working');
+  updateTrayMenu();
   console.log(`[Main] Mode: ${enabled ? 'DRAWING' : 'WORKING'}`);
 }
 
@@ -163,67 +160,44 @@ function toggleMode() {
 // ── Global Hotkey ──
 function registerHotkey() {
   globalShortcut.unregisterAll();
-
   const hotkey = store.get('hotkey', 'CommandOrControl+Shift+D');
-
-  const success = globalShortcut.register(hotkey, () => {
-    toggleMode();
-  });
-
+  const success = globalShortcut.register(hotkey, toggleMode);
   if (success) {
-    console.log(`[Main] Global hotkey registered: ${hotkey}`);
+    console.log(`[Main] Hotkey registered: ${hotkey}`);
   } else {
     console.error(`[Main] Failed to register hotkey: ${hotkey}`);
   }
 }
 
-// ── Tray Icon ──
+// ── Tray ──
+function updateTrayMenu() {
+  if (!tray) return;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: isDrawingMode ? '🔴 Drawing Mode' : '🟢 Working Mode', click: toggleMode },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() },
+  ]));
+}
+
 function createTray() {
-  // Create a simple 16x16 tray icon (colored dot)
   const icon = nativeImage.createFromBuffer(
     Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKElEQVQ4y2P4z8BQz0BKYGBg+M/AwMBATmBgYPjPwMDAQE5gIEcDAFxRCgFXjNOXAAAAAElFTkSuQmCC',
       'base64'
     )
   );
-
   tray = new Tray(icon);
-  tray.setToolTip('EvoDraw Overlay');
-
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: isDrawingMode ? '🔴 Drawing Mode' : '🟢 Working Mode',
-      click: toggleMode,
-    },
-    { type: 'separator' },
-    {
-      label: 'Settings',
-      click: () => {
-        if (overlayWindow) {
-          overlayWindow.webContents.send('show-settings');
-        }
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit',
-      click: () => app.quit(),
-    },
-  ]);
-
-  tray.setContextMenu(contextMenu);
+  tray.setToolTip('EvoDraw Desktop');
+  updateTrayMenu();
   tray.on('click', toggleMode);
 }
 
 // ── IPC Handlers ──
 function setupIPC() {
-  // Renderer requests mode change
   ipcMain.on('overlay:set-mode', (_event, mode) => {
     setDrawingMode(mode === 'drawing');
   });
 
-  // Forward mouse events control from renderer
-  // Used for toolbar hover: toolbar area should always be interactive
   ipcMain.on('overlay:set-ignore-mouse', (_event, ignore) => {
     if (!overlayWindow) return;
     if (ignore) {
@@ -233,27 +207,31 @@ function setupIPC() {
     }
   });
 
-  // Settings
-  ipcMain.handle('overlay:get-settings', () => {
-    return store.store;
-  });
+  ipcMain.handle('overlay:get-settings', () => store.store);
 
   ipcMain.handle('overlay:save-settings', (_event, settings) => {
-    if (settings.hotkey) {
-      store.set('hotkey', settings.hotkey);
-      registerHotkey(); // Re-register with new hotkey
-    }
+    if (settings.hotkey) { store.set('hotkey', settings.hotkey); registerHotkey(); }
     if (settings.defaultColor) store.set('defaultColor', settings.defaultColor);
     if (settings.defaultWidth) store.set('defaultWidth', settings.defaultWidth);
-    if (settings.toolbarPosition) store.set('toolbarPosition', settings.toolbarPosition);
-
+    if (settings.serverUrl) store.set('serverUrl', settings.serverUrl);
+    if (settings.username !== undefined) store.set('username', settings.username);
     return store.store;
   });
 
-  // Quit
-  ipcMain.on('overlay:quit', () => {
-    app.quit();
+  // Renderer fetches any deep-link params that arrived before React mounted
+  ipcMain.handle('overlay:get-pending-deep-link', () => {
+    const params = pendingDeepLink;
+    pendingDeepLink = null;
+    if (params && overlayWindow) overlayWindow.show();
+    return params;
   });
+
+  ipcMain.on('overlay:room-state', (_event, { inRoom }) => {
+    tray?.setToolTip(inRoom ? 'EvoDraw — In Room' : 'EvoDraw Desktop');
+    if (!inRoom && overlayWindow) overlayWindow.hide();
+  });
+
+  ipcMain.on('overlay:quit', () => app.quit());
 }
 
 // ── App Lifecycle ──
@@ -263,12 +241,22 @@ app.whenReady().then(() => {
   createTray();
   setupIPC();
 
-  // Check if launched via deep link (Windows: URL is in process.argv)
-  const deepLinkUrl = process.argv.find((arg) =>
-    arg.startsWith(`${PROTOCOL}://`)
-  );
+  const deepLinkUrl = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
   if (deepLinkUrl) {
-    handleDeepLink(deepLinkUrl);
+    // Page isn't loaded yet — store as pending so renderer fetches it on mount
+    try {
+      const parsed = new URL(deepLinkUrl);
+      pendingDeepLink = {
+        room: parsed.searchParams.get('room'),
+        token: parsed.searchParams.get('token'),
+        server: parsed.searchParams.get('server') || store.get('serverUrl', 'http://localhost:4000'),
+        shareId: parsed.searchParams.get('shareId'),
+        username: parsed.searchParams.get('username'),
+      };
+      console.log('[Main] Stored argv deep link as pending:', pendingDeepLink.room);
+    } catch (err) {
+      console.error('[Main] Failed to parse argv deep link:', err);
+    }
   }
 });
 

@@ -6,10 +6,12 @@ import { ensureAuthorizedRoom } from '../utils/guard.js';
 async function getRoomUsers(io, roomId) {
     try {
         const sockets = await io.in(roomId).fetchSockets();
-        return sockets.map(s => ({
-            socketId: s.id,
-            username: s.data.username
-        }));
+        return sockets
+            .filter(s => !s.data.isOverlay)
+            .map(s => ({
+                socketId: s.id,
+                username: s.data.username
+            }));
     } catch (err) {
         console.error('Error fetching sockets:', err);
         return [];
@@ -81,6 +83,27 @@ export const registerRoomHandlers = (io, socket) => {
         markRoomActivity(roomId, { force: true });
 
         socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
+        broadcastRoomUsers(io, roomId);
+    });
+
+    // Desktop overlay join — uses JWT auth instead of passcode
+    socket.on('join_room_overlay', ({ roomId, username }) => {
+        const authRoomId = socket.data?.auth?.roomId?.toString();
+        if (!authRoomId || authRoomId !== (roomId || '').toString()) {
+            socket.emit('room_error', { message: 'Token does not authorize this room.' });
+            return;
+        }
+
+        socket.join(roomId);
+        socket.data.roomId = roomId;
+        socket.data.username = username || 'Presenter';
+        socket.data.isOverlay = true;
+
+        console.log(`[Overlay] ${socket.data.username} joined room ${roomId} via overlay`);
+        markRoomActivity(roomId, { force: true });
+
+        socket.emit('room_joined', { roomId });
+        socket.to(roomId).emit('user_joined', { username: socket.data.username, roomId, socketId: socket.id });
         broadcastRoomUsers(io, roomId);
     });
 

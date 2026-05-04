@@ -116,23 +116,32 @@ function connectToServer(serverUrl, token) {
   })
 
   socket.on('connect', () => {
-    console.log('[Overlay] Connected to server')
-    updateConnectionStatus(true)
+    console.log('[Overlay] Connected to server, joining room...')
+    updateConnectionStatus('connecting')
 
-    // Join the room
     if (roomId && username) {
-      socket.emit('join_room', { roomId, username })
+      socket.emit('join_room_overlay', { roomId, username })
     }
+  })
+
+  socket.on('room_joined', () => {
+    console.log('[Overlay] Joined room:', roomId)
+    updateConnectionStatus('connected')
+  })
+
+  socket.on('room_error', ({ message }) => {
+    console.error('[Overlay] Room join error:', message)
+    updateConnectionStatus('error')
   })
 
   socket.on('disconnect', () => {
     console.log('[Overlay] Disconnected from server')
-    updateConnectionStatus(false)
+    updateConnectionStatus('disconnected')
   })
 
   socket.on('connect_error', (err) => {
     console.error('[Overlay] Connection error:', err.message)
-    updateConnectionStatus(false)
+    updateConnectionStatus('error')
   })
 
   socket.on('screen:stopped', (data) => {
@@ -143,12 +152,17 @@ function connectToServer(serverUrl, token) {
   })
 }
 
-function updateConnectionStatus(connected) {
-  if (connected) {
+function updateConnectionStatus(status) {
+  connStatus.classList.remove('connected', 'error')
+  if (status === 'connected') {
     connStatus.classList.add('connected')
-    connText.textContent = `Connected: ${roomId || 'N/A'}`
+    connText.textContent = `Room: ${roomId || 'N/A'}`
+  } else if (status === 'connecting') {
+    connText.textContent = 'Joining...'
+  } else if (status === 'error') {
+    connStatus.classList.add('error')
+    connText.textContent = 'Connection failed'
   } else {
-    connStatus.classList.remove('connected')
     connText.textContent = 'Disconnected'
   }
 }

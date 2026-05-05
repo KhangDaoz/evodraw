@@ -36,7 +36,6 @@ export default function RoomPage() {
   const canvasRef = useRef(null)
   const chatPanelRef = useRef(null)
   const chatToggleBtnRef = useRef(null)
-  const hasLaunchedOverlay = useRef(false)
 
   // Canvas background: compute initial color based on theme
   const [canvasBgId, setCanvasBgId] = useState('default')
@@ -108,22 +107,6 @@ export default function RoomPage() {
     handleToggle: handleScreenShareToggle,
     handleResolutionChange, handleFpsChange, handleToggleAudio,
   } = useScreenShareControls(screenShareHook)
-
-  // Auto-launch desktop overlay when screen sharing starts
-  useEffect(() => {
-    if (isSharing && screenShareHook.localShareId) {
-      if (!hasLaunchedOverlay.current) {
-        console.log('[RoomPage] Screen share detected, auto-launching desktop overlay')
-        const serverUrl = encodeURIComponent(import.meta.env.VITE_SERVER_URL || 'http://localhost:4000')
-        const link = `evodraw://overlay?room=${roomCode}&shareId=${screenShareHook.localShareId}&server=${serverUrl}&token=${passcode}&username=${encodeURIComponent(username)}`
-        
-        window.open(link, '_self')
-        hasLaunchedOverlay.current = true
-      }
-    } else if (!isSharing) {
-      hasLaunchedOverlay.current = false
-    }
-  }, [isSharing, screenShareHook.localShareId, roomCode, passcode, username])
 
   // Keep fabricCanvas and screenShareLayer in sync when canvas ref mounts
   useEffect(() => {

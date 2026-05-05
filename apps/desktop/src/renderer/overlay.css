@@ -1,222 +1,63 @@
-/* ── Reset ── */
+/* === CSS custom properties — dark frosted-glass theme === */
+:root {
+  --accent: #7c78f0;
+  --accent-hover: #6965db;
+  --text: #e4e4e8;
+  --text-light: #a0a0ab;
+  --text-muted: #6e6e7a;
+  --border: rgba(255, 255, 255, 0.12);
+  --surface: rgba(20, 20, 26, 0.72);
+  --bg: transparent;
+}
+
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+button {
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
 html, body, #root {
-  width: 100vw;
-  height: 100vh;
+  width: 100vw; height: 100vh;
   overflow: hidden;
   background: transparent;
-  font-family: 'Segoe UI', -apple-system, sans-serif;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
   user-select: none;
   -webkit-app-region: no-drag;
 }
 
-/* ════════════════════════════════════════
-   LANDING PAGE
-════════════════════════════════════════ */
-.landing-root {
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(12, 12, 14, 0.96);
-  backdrop-filter: blur(20px);
-}
-
-.landing-card {
-  width: 340px;
-  background: rgba(30, 30, 35, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.landing-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.landing-logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: -0.02em;
-}
-
-.server-btn {
-  background: transparent;
-  border: none;
-  color: rgba(255,255,255,0.35);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
-  transition: color 0.15s;
-}
-.server-btn:hover { color: rgba(255,255,255,0.7); }
-
-.server-row {
-  display: flex;
-  gap: 8px;
-}
-
-.username-row label {
-  display: block;
-  font-size: 11px;
-  color: rgba(255,255,255,0.45);
-  margin-bottom: 5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.landing-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 8px;
-  background: rgba(255,255,255,0.05);
-  color: #fff;
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.15s;
-  font-family: inherit;
-}
-.landing-input:focus { border-color: rgba(255,255,255,0.3); }
-.landing-input::placeholder { color: rgba(255,255,255,0.25); }
-
-.tab-row {
-  display: flex;
-  gap: 4px;
-  background: rgba(255,255,255,0.04);
-  border-radius: 10px;
-  padding: 3px;
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 7px 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(255,255,255,0.45);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: inherit;
-}
-.tab-btn.active {
-  background: rgba(255,255,255,0.1);
-  color: #fff;
-}
-
-.tab-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.tab-desc {
-  font-size: 12px;
-  color: rgba(255,255,255,0.4);
-  line-height: 1.5;
-}
-
-.btn-primary {
-  width: 100%;
-  padding: 10px;
-  border: none;
-  border-radius: 10px;
-  background: #e03131;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-  font-family: inherit;
-}
-.btn-primary:hover:not(:disabled) { background: #c92a2a; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.btn-secondary-sm {
-  padding: 8px 12px;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 8px;
-  background: rgba(255,255,255,0.05);
-  color: rgba(255,255,255,0.7);
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  font-family: inherit;
-}
-
-.landing-error {
-  font-size: 12px;
-  color: #ff6b6b;
-  background: rgba(224, 49, 49, 0.1);
-  border: 1px solid rgba(224,49,49,0.2);
-  border-radius: 8px;
-  padding: 8px 12px;
-}
-
-.hotkey-hint {
-  font-size: 11px;
-  color: rgba(255,255,255,0.25);
-  text-align: center;
-}
-.hotkey-hint kbd {
-  font-family: monospace;
-  background: rgba(255,255,255,0.08);
-  border-radius: 4px;
-  padding: 1px 5px;
-}
-
-/* ════════════════════════════════════════
-   OVERLAY PAGE
-════════════════════════════════════════ */
+/* === Overlay root — transparent, full screen === */
 .overlay-root {
-  width: 100vw;
-  height: 100vh;
+  width: 100vw; height: 100vh;
   position: relative;
   background: transparent;
 }
 
-/* Solid background toggle */
-.overlay-root.solid-bg {
-  background: rgba(16, 16, 20, 0.88);
+/* Fabric.js wraps <canvas> in .canvas-container — pin it behind everything */
+.canvas-container {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  background: transparent !important;
 }
 
-#overlay-canvas {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-}
-
-/* ── Mode Indicator ── */
+/* === Mode indicator pill — top center === */
 .mode-indicator {
   position: fixed;
-  top: 12px;
-  left: 50%;
+  top: 12px; left: 50%;
   transform: translateX(-50%);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  z-index: 300;
+  display: flex; align-items: center; gap: 6px;
   padding: 5px 14px;
   border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  pointer-events: none;
+  font-size: 12px; font-weight: 600;
   backdrop-filter: blur(8px);
-  transition: all 0.25s;
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: none;
 }
 .mode-indicator.working { background: rgba(34, 139, 34, 0.85); color: #fff; }
 .mode-indicator.drawing { background: rgba(224, 49, 49, 0.9); color: #fff; }
@@ -227,120 +68,121 @@ html, body, #root {
   background: currentColor;
   animation: pulse 1.5s ease-in-out infinite;
 }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }
 
-/* Drawing border glow */
+/* Red border glow in drawing mode */
 .overlay-root:has(.mode-indicator.drawing)::after {
   content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 50;
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 50;
   border: 3px solid rgba(224, 49, 49, 0.5);
   animation: border-glow 2s ease-in-out infinite alternate;
 }
 @keyframes border-glow {
-  from { border-color: rgba(224,49,49,0.5); }
-  to { border-color: rgba(224,49,49,0.15); }
+  from { border-color: rgba(224, 49, 49, 0.5); }
+  to   { border-color: rgba(224, 49, 49, 0.15); }
 }
 
-/* ── Toolbar ── */
-.toolbar {
-  position: fixed;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 200;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 6px;
+/* === Toolbar children — overlay actions card (clear + leave) === */
+.overlay-actions {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px;
+  margin-top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background: rgba(30, 30, 30, 0.92);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-  border: 1px solid rgba(255,255,255,0.08);
-  transition: opacity 0.2s, transform 0.2s;
-}
-.toolbar.hidden { opacity: 0; pointer-events: none; transform: translateY(-50%) translateX(20px); }
-
-.toolbar-separator { width: 24px; height: 1px; background: rgba(255,255,255,0.1); margin: 2px 0; }
-
-/* ── Tool Buttons ── */
-.tool-btn {
-  width: 36px; height: 36px;
-  display: flex; align-items: center; justify-content: center;
-  border: none; border-radius: 8px;
-  background: transparent; color: rgba(255,255,255,0.7);
-  cursor: pointer; transition: all 0.15s;
-}
-.tool-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-.tool-btn.active { background: rgba(255,255,255,0.15); color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.2); }
-.tool-btn.exit-btn:hover { background: rgba(224,49,49,0.3); color: #ff6b6b; }
-
-/* ── Color Picker ── */
-.color-swatch { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); display: block; }
-
-.color-dropdown, .width-dropdown {
-  position: absolute;
-  right: 46px; top: 0;
-  background: rgba(30,30,30,0.95);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 10px;
-  padding: 8px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  z-index: 300;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
-.color-presets { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; margin-bottom: 6px; }
-.color-preset { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s; }
-.color-preset:hover { transform: scale(1.15); }
-.color-preset.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.3); }
+.exit-btn:hover {
+  background: rgba(224, 49, 49, 0.18) !important;
+  color: #ff6b6b !important;
+}
 
-.color-dropdown input[type="color"] { width: 100%; height: 28px; border: none; border-radius: 4px; cursor: pointer; background: transparent; }
+/* Local-only note — shown when a non-syncing tool is active */
+.local-only-note {
+  margin-top: 6px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #ffb347;
+  background: rgba(255, 179, 71, 0.12);
+  border: 1px solid rgba(255, 179, 71, 0.3);
+  border-radius: 6px;
+  text-align: center;
+}
 
-.width-dropdown { min-width: 100px; }
-.width-opt { display: block; width: 100%; padding: 6px 10px; border: none; background: transparent; color: rgba(255,255,255,0.7); text-align: left; font-size: 12px; border-radius: 4px; cursor: pointer; font-family: inherit; }
-.width-opt:hover { background: rgba(255,255,255,0.1); }
-.width-opt.active { color: #fff; background: rgba(255,255,255,0.12); }
-
-/* ── Connection Status ── */
+/* === Connection status — bottom left === */
 .connection-status {
   position: fixed;
   bottom: 12px; left: 12px;
-  z-index: 100;
+  z-index: 300;
   display: flex; align-items: center; gap: 6px;
   padding: 4px 12px;
   border-radius: 16px;
-  background: rgba(30,30,30,0.85);
+  background: var(--surface);
+  border: 1px solid var(--border);
   backdrop-filter: blur(8px);
-  font-size: 11px;
-  color: rgba(255,255,255,0.6);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 11px; color: var(--text-muted);
   pointer-events: none;
-  cursor: default;
 }
-.conn-dot { width: 6px; height: 6px; border-radius: 50%; background: #aaa; }
+.conn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
 .connection-status.connected .conn-dot { background: #2f9e44; }
-.connection-status.connected .conn-text { color: rgba(255,255,255,0.8); }
+.connection-status.connected .conn-text { color: var(--text-light); }
 .connection-status.error .conn-dot { background: #e03131; }
-.connection-status.error .conn-text { color: rgba(255,100,100,0.9); }
+.connection-status.error .conn-text { color: #ff6b6b; }
 
-/* ── Mode toggle FAB (always visible, bottom-right) ── */
+/* === Mode toggle FAB — bottom right === */
 .mode-toggle-fab {
   position: fixed;
   bottom: 12px; right: 16px;
-  z-index: 200;
-  width: 36px; height: 36px;
+  z-index: 300;
+  width: 40px; height: 40px;
   border-radius: 50%;
-  background: rgba(30,30,30,0.9);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: rgba(255,255,255,0.8);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-light);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   backdrop-filter: blur(8px);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
-  transition: background 0.15s, transform 0.15s;
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  transition: background 0.15s, transform 0.15s, color 0.15s;
 }
-.mode-toggle-fab:hover { background: rgba(224,49,49,0.7); transform: scale(1.08); }
+.mode-toggle-fab:hover {
+  background: rgba(224, 49, 49, 0.7);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+/* === Chat toggle FAB — bottom right, next to mode toggle === */
+.chat-toggle-fab {
+  position: fixed;
+  bottom: 12px; right: 64px;
+  z-index: 300;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-light);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  transition: background 0.15s, transform 0.15s, color 0.15s;
+}
+.chat-toggle-fab:hover {
+  background: rgba(124, 120, 240, 0.5);
+  color: #fff;
+  transform: scale(1.08);
+}
+.chat-toggle-fab.active {
+  background: rgba(124, 120, 240, 0.7);
+  color: #fff;
+}

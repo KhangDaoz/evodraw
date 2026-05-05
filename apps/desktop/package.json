@@ -13,6 +13,7 @@
     "make": "electron-forge make"
   },
   "dependencies": {
+    "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^8.1.0",
     "fabric": "^7.2.0",
     "react": "^19.0.0",

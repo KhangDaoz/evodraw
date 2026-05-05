@@ -11,6 +11,12 @@ const {
 const path = require('node:path');
 const Store = require('electron-store');
 
+// Keep Chromium painting windows that are fully covered by the always-on-top overlay.
+// Without these switches, the browser tab being screen-captured renders black for remote viewers
+// when the overlay sits on top of it.
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+
 // Handle Squirrel events (Windows installer)
 if (require('electron-squirrel-startup')) app.quit();
 // Squirrel launches the app once after install with this flag — don't open anything
@@ -54,7 +60,8 @@ if (!gotTheLock) {
     if (url) handleDeepLink(url);
     if (overlayWindow) {
       if (overlayWindow.isMinimized()) overlayWindow.restore();
-      overlayWindow.focus();
+      // Never call overlayWindow.focus() — it steals focus from the browser tab
+      // being screen-captured and causes the captured video to render black.
     }
   });
 }
@@ -79,6 +86,8 @@ function handleDeepLink(url) {
 
     if (overlayWindow && overlayWindow.webContents) {
       overlayWindow.show();
+      // TEMP DEBUG — open DevTools when the overlay surfaces so we can see renderer errors
+      overlayWindow.webContents.openDevTools({ mode: 'detach' });
       overlayWindow.webContents.send('deep-link', params);
     } else {
       pendingDeepLink = params;
@@ -117,6 +126,10 @@ function createOverlayWindow() {
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
   isDrawingMode = false;
 
+  // Hide the overlay's surface from screen-capture pipelines so the presenter's own
+  // browser tab being shared doesn't bake annotations into the captured frame.
+  overlayWindow.setContentProtection(true);
+
   overlayWindow.setAlwaysOnTop(true, 'screen-saver');
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
@@ -143,7 +156,9 @@ function setDrawingMode(enabled) {
 
   if (enabled) {
     overlayWindow.setIgnoreMouseEvents(false);
-    overlayWindow.focus();
+    // Do NOT call overlayWindow.focus() here — focus theft blacks out the
+    // browser tab being captured. setIgnoreMouseEvents(false) alone is enough
+    // for Fabric to receive mouse events.
   } else {
     overlayWindow.setIgnoreMouseEvents(true, { forward: true });
   }
@@ -158,14 +173,20 @@ function toggleMode() {
 }
 
 // ── Global Hotkey ──
+const DEFAULT_HOTKEY = 'CommandOrControl+Shift+D';
 function registerHotkey() {
   globalShortcut.unregisterAll();
-  const hotkey = store.get('hotkey', 'CommandOrControl+Shift+D');
-  const success = globalShortcut.register(hotkey, toggleMode);
-  if (success) {
+  const hotkey = store.get('hotkey', DEFAULT_HOTKEY);
+  if (globalShortcut.register(hotkey, toggleMode)) {
     console.log(`[Main] Hotkey registered: ${hotkey}`);
+    return;
+  }
+  console.warn(`[Main] Failed to register stored hotkey "${hotkey}" — Windows may have reserved it. Resetting to default.`);
+  if (hotkey !== DEFAULT_HOTKEY && globalShortcut.register(DEFAULT_HOTKEY, toggleMode)) {
+    store.set('hotkey', DEFAULT_HOTKEY);
+    console.log(`[Main] Hotkey registered: ${DEFAULT_HOTKEY} (stored value reset)`);
   } else {
-    console.error(`[Main] Failed to register hotkey: ${hotkey}`);
+    console.error(`[Main] Failed to register fallback hotkey: ${DEFAULT_HOTKEY}`);
   }
 }
 
@@ -222,7 +243,11 @@ function setupIPC() {
   ipcMain.handle('overlay:get-pending-deep-link', () => {
     const params = pendingDeepLink;
     pendingDeepLink = null;
-    if (params && overlayWindow) overlayWindow.show();
+    if (params && overlayWindow) {
+      overlayWindow.show();
+      // TEMP DEBUG
+      overlayWindow.webContents.openDevTools({ mode: 'detach' });
+    }
     return params;
   });
 

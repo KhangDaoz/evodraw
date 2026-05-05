@@ -1,113 +1,173 @@
-import { useEffect, useRef, useCallback } from 'react';
-import * as fabric from 'fabric';
+import { useEffect, useRef, useCallback } from 'react'
+import * as fabric from 'fabric'
 
 export default function useHistory(canvas, syncState) {
-  const undoStack = useRef([]);
-  const redoStack = useRef([]);
-  const historyApplying = useRef(false);
-  const isDragging = useRef(false);
-  const dragState = useRef(null);
+  const undoStack = useRef([])
+  const redoStack = useRef([])
+  const historyApplying = useRef(false)
+  const isDragging = useRef(false)
+  const dragState = useRef(null)
 
   const saveState = useCallback((op) => {
-    if (undoStack.current.length >= 50) undoStack.current.shift();
-    undoStack.current.push(op);
-    redoStack.current = [];
-  }, []);
+    if (undoStack.current.length >= 50) {
+      undoStack.current.shift()
+    }
+    undoStack.current.push(op)
+    redoStack.current = []
+  }, [])
 
   useEffect(() => {
-    if (!canvas) return;
+    if (!canvas) return
 
-    const shouldIgnore = () => syncState?.current?._applying || historyApplying.current;
+    const shouldIgnore = () => syncState?.current?._applying || historyApplying.current
 
     const onAdded = ({ target }) => {
-      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading) return;
-      if (!target._evoId) target._evoId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      saveState({ type: 'add', id: target._evoId, object: { ...target.toJSON(['_evoId']), _evoId: target._evoId } });
-    };
+      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading) return
+
+      if (!target._evoId) {
+        target._evoId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+      }
+
+      saveState({
+        type: 'add',
+        id: target._evoId,
+        object: { ...target.toJSON(['_evoId', '_evoImage']), _evoId: target._evoId, _evoImage: target._evoImage || false }
+      })
+    }
 
     const onRemoved = ({ target }) => {
-      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading) return;
-      saveState({ type: 'remove', id: target._evoId, object: { ...target.toJSON(['_evoId']), _evoId: target._evoId } });
-    };
+      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading) return
+      saveState({
+        type: 'remove',
+        id: target._evoId,
+        object: { ...target.toJSON(['_evoId', '_evoImage']), _evoId: target._evoId, _evoImage: target._evoImage || false }
+      })
+    }
 
     const onModified = ({ target }) => {
-      if (shouldIgnore() || target._evoScreenShare || target._evoUploading) return;
-      if (dragState.current) {
-        saveState({ type: 'modify', id: target._evoId, prevState: dragState.current, newState: { ...target.toJSON(['_evoId']), _evoId: target._evoId } });
+      if (shouldIgnore() || target._evoScreenShare || target._evoUploading) return
+      const prevState = dragState.current
+      if (prevState) {
+        saveState({
+          type: 'modify',
+          id: target._evoId || prevState._evoId,
+          prevState: prevState,
+          newState: { ...target.toJSON(['_evoId', '_evoImage']), _evoId: target._evoId, _evoImage: target._evoImage || false }
+        })
       }
-      dragState.current = null;
-      isDragging.current = false;
-    };
+      dragState.current = null
+      isDragging.current = false
+    }
 
-    const onMouseDown = (o) => {
-      if (shouldIgnore() || isDragging.current || !o.target || o.target._evoScreenShare) return;
-      isDragging.current = true;
-      dragState.current = { ...o.target.toJSON(['_evoId']), _evoId: o.target._evoId };
-    };
+    const onBeforeModify = (e) => {
+      if (shouldIgnore() || isDragging.current || !e.target || e.target._evoScreenShare || e.target._evoUploading) return
+      isDragging.current = true
+      dragState.current = { ...e.target.toJSON(['_evoId', '_evoImage']), _evoId: e.target._evoId, _evoImage: e.target._evoImage || false }
+    }
 
-    canvas.on('object:added', onAdded);
-    canvas.on('object:removed', onRemoved);
-    canvas.on('object:modified', onModified);
-    canvas.on('mouse:down', onMouseDown);
+    canvas.on('object:added', onAdded)
+    canvas.on('object:removed', onRemoved)
+    canvas.on('object:modified', onModified)
+
+    canvas.on('mouse:down', (o) => {
+      if (o.target && !isDragging.current) onBeforeModify(o)
+    })
+
+    canvas.on('path:created', () => {
+      if (shouldIgnore()) return
+    })
 
     return () => {
-      canvas.off('object:added', onAdded);
-      canvas.off('object:removed', onRemoved);
-      canvas.off('object:modified', onModified);
-      canvas.off('mouse:down', onMouseDown);
-    };
-  }, [canvas, saveState, syncState]);
+      canvas.off('object:added', onAdded)
+      canvas.off('object:removed', onRemoved)
+      canvas.off('object:modified', onModified)
+      canvas.off('mouse:down', onBeforeModify)
+    }
+  }, [canvas, saveState, syncState])
 
-  const findById = useCallback((id) => canvas?.getObjects().find((o) => o._evoId === id) || null, [canvas]);
+  const findById = (evoId) => {
+    return canvas.getObjects().find((o) => o._evoId === evoId || (o.toJSON()._evoId === evoId)) || null
+  }
 
   const applyOp = useCallback(async (op, isUndo) => {
-    if (!canvas) return;
-    historyApplying.current = true;
+    if (!canvas) return
+    historyApplying.current = true
+
     try {
       if (op.type === 'add') {
-        if (isUndo) { const t = findById(op.id); if (t) canvas.remove(t); }
-        else { const [obj] = await fabric.util.enlivenObjects([op.object]); if (op.object._evoId) obj._evoId = op.object._evoId; canvas.add(obj); }
+        if (isUndo) {
+          const target = findById(op.id)
+          if (target) {
+            canvas.remove(target)
+          }
+        } else {
+          const [obj] = await fabric.util.enlivenObjects([op.object])
+          if (op.object._evoId) obj._evoId = op.object._evoId
+          if (op.object._evoImage) obj._evoImage = true
+          canvas.add(obj)
+        }
       } else if (op.type === 'remove') {
-        if (isUndo) { const [obj] = await fabric.util.enlivenObjects([op.object]); if (op.object._evoId) obj._evoId = op.object._evoId; canvas.add(obj); }
-        else { const t = findById(op.id); if (t) canvas.remove(t); }
+        if (isUndo) {
+          const [obj] = await fabric.util.enlivenObjects([op.object])
+          if (op.object._evoId) obj._evoId = op.object._evoId
+          if (op.object._evoImage) obj._evoImage = true
+          canvas.add(obj)
+        } else {
+          const target = findById(op.id)
+          if (target) {
+            canvas.remove(target)
+          }
+        }
       } else if (op.type === 'modify') {
-        const t = findById(op.id);
-        if (t) { const { _evoId, ...props } = isUndo ? op.prevState : op.newState; t.set(props); t.setCoords(); canvas.fire('object:modified', { target: t }); }
+        const target = findById(op.id)
+        if (target) {
+          const stateToApply = isUndo ? op.prevState : op.newState
+          const { _evoId, ...props } = stateToApply
+          target.set(props)
+          target.setCoords()
+          canvas.fire('object:modified', { target })
+        }
       }
     } finally {
-      canvas.requestRenderAll();
-      historyApplying.current = false;
+      if (canvas) canvas.requestRenderAll()
+      historyApplying.current = false
     }
-  }, [canvas, findById]);
+  }, [canvas])
 
   const undo = useCallback(async () => {
-    if (!undoStack.current.length) return;
-    const op = undoStack.current.pop();
-    redoStack.current.push(op);
-    await applyOp(op, true);
-  }, [applyOp]);
+    if (undoStack.current.length === 0) return
+    const op = undoStack.current.pop()
+    redoStack.current.push(op)
+    await applyOp(op, true)
+  }, [applyOp])
 
   const redo = useCallback(async () => {
-    if (!redoStack.current.length) return;
-    const op = redoStack.current.pop();
-    undoStack.current.push(op);
-    await applyOp(op, false);
-  }, [applyOp]);
+    if (redoStack.current.length === 0) return
+    const op = redoStack.current.pop()
+    undoStack.current.push(op)
+    await applyOp(op, false)
+  }, [applyOp])
 
   useEffect(() => {
-    const onKey = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        e.shiftKey ? redo() : undo();
-      } else if (e.key.toLowerCase() === 'y' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        redo();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo]);
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return
 
-  return { undo, redo };
+      if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        if (e.shiftKey) {
+          redo()
+        } else {
+          undo()
+        }
+      } else if (e.key.toLowerCase() === 'y' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        redo()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [undo, redo])
+
+  return { undo, redo, canUndo: undoStack.current.length > 0, canRedo: redoStack.current.length > 0 }
 }

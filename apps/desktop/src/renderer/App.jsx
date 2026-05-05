@@ -36,6 +36,7 @@ export default function App() {
   }, []);
 
   const handleDeepLinkParams = (params) => {
+    console.log('[App] handleDeepLinkParams', params);
     if (params.server) applyServerUrl(params.server);
     localStorage.setItem('token', params.token);
     setRoomInfo({
@@ -57,6 +58,7 @@ export default function App() {
     window.electronAPI.setMode('working');
   }, []);
 
+  console.log('[App] render', { roomInfo, serverUrl, screenSize });
   if (!roomInfo) return null;
 
   return (

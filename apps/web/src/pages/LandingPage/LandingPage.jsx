@@ -17,6 +17,7 @@ export default function LandingPage() {
   const location = useLocation()
   const [roomCode, setRoomCode] = useState(location.state?.roomCode || '')
   const [passcode, setPasscode] = useState('')
+  const [displayName, setDisplayName] = useState(() => localStorage.getItem('evodraw_username') || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(location.state?.error || '')
 
@@ -26,12 +27,13 @@ export default function LandingPage() {
 
   const handleInteractionCreateRoom = async () => {
     if (loading) return
+    const username = displayName.trim() || generateAnonymousName()
+    localStorage.setItem('evodraw_username', username)
     setLoading(true)
     setError('')
     try {
       const res = await createRoom()
-      const { code, passcode: newPasscode } = res.data // code and passcode from server
-      const username = localStorage.getItem('evodraw_username') || generateAnonymousName()
+      const { code, passcode: newPasscode } = res.data
       navigate(`/room/${code}`, {
         state: { passcode: newPasscode, username }
       })
@@ -71,7 +73,8 @@ export default function LandingPage() {
 
     try {
       await joinRoom(roomCode.trim(), passcode.trim())
-      const username = localStorage.getItem('evodraw_username') || generateAnonymousName()
+      const username = displayName.trim() || generateAnonymousName()
+      localStorage.setItem('evodraw_username', username)
       navigate(`/room/${roomCode.trim().toUpperCase()}`, {
         state: { passcode: passcode.trim(), username }
       })
@@ -113,6 +116,14 @@ export default function LandingPage() {
             {error && <p className="welcome-error">{error}</p>}
 
             <form className="welcome-form" onSubmit={handleJoinRoom}>
+              <input
+                type="text"
+                placeholder="Display name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                maxLength={24}
+                autoComplete="off"
+              />
               <input
                 type="text"
                 placeholder="Room code"

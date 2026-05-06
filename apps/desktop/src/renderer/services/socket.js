@@ -14,6 +14,9 @@ export function connectSocket(serverUrl) {
     reconnectionDelay: 1000,
     timeout: 10000,
     auth: { token },
+    extraHeaders: {
+      origin: serverUrl.replace(/^(https?:\/\/[^/]+).*/, '$1'),
+    },
   });
 
   return socket;

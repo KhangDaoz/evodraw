@@ -79,8 +79,16 @@ function syncOverlayPosition(fabricObj, overlayDiv, canvas) {
 export function createScreenShareOverlay(videoEl, shareId, username, canvas, layerEl, existingRect = null) {
   const color = getSharerColor(username)
 
-  const videoW = videoEl.videoWidth || 1920
-  const videoH = videoEl.videoHeight || 1080
+  const videoW = videoEl.videoWidth
+  const videoH = videoEl.videoHeight
+
+  // Without real dimensions, a hardcoded 1920×1080 fallback produces a misaligned
+  // black rect on screens that don't match those dimensions. Caller must wait
+  // for `loadedmetadata` and retry.
+  if (!videoW || !videoH) {
+    console.warn(`[ScreenShare] createScreenShareOverlay called before video metadata loaded; deferring`)
+    return { proxyRect: null, overlayDiv: null, isExisting: false }
+  }
 
   console.log(`[ScreenShare] Creating overlay: ${videoW}x${videoH} for ${username}`)
 
@@ -163,9 +171,10 @@ export function createScreenShareOverlay(videoEl, shareId, username, canvas, lay
     // Use shareId as _evoId so the canvas sync pipeline can match it
     proxyRect._evoId = shareId
 
-    // Scale to a reasonable default size (640x360 or fit within viewport)
-    const vw = canvas.getWidth()
-    const vh = canvas.getHeight()
+    // Scale to a reasonable default size (640x360 or fit within viewport).
+    // Fall back to 1280×720 if the canvas hasn't been laid out yet (getWidth/Height = 0).
+    const vw = canvas.getWidth() || 1280
+    const vh = canvas.getHeight() || 720
     const maxW = Math.min(640, vw * 0.6)
     const maxH = Math.min(360, vh * 0.6)
     const scale = Math.min(maxW / videoW, maxH / videoH, 1)

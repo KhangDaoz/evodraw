@@ -8,12 +8,14 @@ import { getSocket } from '../services/socket'
  * connects to LiveKit Cloud. The returned `room` object is shared
  * between useVoiceChat and useScreenShare.
  *
+ * Username is locked at room-join time and never changes mid-session,
+ * so it is safe to include in the effect deps without risk of disconnect.
+ *
  * @param {string} roomId  - EvoDraw room code
- * @param {string} username - Current user's display name
+ * @param {string} username - Current user's display name (fixed for session)
  * @returns {{ room: Room, isLiveKitConnected: boolean }}
  */
 export default function useLiveKitRoom(roomId, username) {
-  // Room is created once and reused across the component lifecycle.
   const [room] = useState(() => new Room({
     adaptiveStream: true,
     dynacast: true,
@@ -33,32 +35,43 @@ export default function useLiveKitRoom(roomId, username) {
       }
     }
 
-    const handleDisconnected = () => {
+    const connectToRoom = () => {
+      socket.emit('livekit:get-token', { roomId, username }, async (response) => {
+        if (cancelled) return
+        if (response?.error) {
+          console.error('[LiveKit] Token error:', response.error)
+          return
+        }
+        try {
+          await room.connect(response.url, response.token)
+          console.log('[LiveKit] Room connected successfully')
+        } catch (err) {
+          console.error('[LiveKit] Connection failed:', err)
+        }
+      })
+    }
+
+    const handleDisconnected = (reason) => {
       if (!cancelled) {
-        console.log('[LiveKit] Disconnected from room')
+        console.log('[LiveKit] Disconnected from room — reason:', reason, '— reconnecting in 2s')
         setIsLiveKitConnected(false)
+        setTimeout(() => {
+          if (!cancelled && room.state !== 'connected') {
+            console.log('[LiveKit] Attempting reconnect...')
+            connectToRoom()
+          }
+        }, 2000)
       }
     }
 
     room.on(RoomEvent.Connected, handleConnected)
     room.on(RoomEvent.Disconnected, handleDisconnected)
 
-    // Request a token from the server and connect
-    socket.emit('livekit:get-token', { roomId, username }, async (response) => {
-      if (cancelled) return
-
-      if (response?.error) {
-        console.error('[LiveKit] Token error:', response.error)
-        return
-      }
-
-      try {
-        await room.connect(response.url, response.token)
-        console.log('[LiveKit] Room connected successfully')
-      } catch (err) {
-        console.error('[LiveKit] Connection failed:', err)
-      }
-    })
+    if (room.state === 'connected') {
+      setIsLiveKitConnected(true)
+    } else {
+      connectToRoom()
+    }
 
     return () => {
       cancelled = true

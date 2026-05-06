@@ -6,6 +6,7 @@ import SettingsPanel from '../components/SettingsPanel/SettingsPanel'
 import useRoom from '../hooks/useRoom'
 import useChat from '../hooks/useChat'
 import useOverlayEmit from '../hooks/useOverlayEmit'
+import { getSocket } from '../services/socket'
 
 const SYNCING_TOOLS = new Set(['pen', 'eraser', 'select'])
 
@@ -37,6 +38,22 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
     useOverlayEmit(isOverlayMode ? fabricCanvas : null, roomId, shareId, screenSize)
 
   const onCanvasReady = useCallback((fc) => setFabricCanvas(fc), [])
+
+  // Auto-leave overlay when the presenter (web) stops the screen share.
+  // Server broadcasts `screen:stopped { shareId }` to the room.
+  useEffect(() => {
+    if (!isOverlayMode || !isConnected) return
+    const socket = getSocket()
+    if (!socket) return
+    const onStopped = ({ shareId: stoppedShareId }) => {
+      if (stoppedShareId === shareId) {
+        console.log('[OverlayPage] Presenter stopped sharing — leaving overlay')
+        onLeave()
+      }
+    }
+    socket.on('screen:stopped', onStopped)
+    return () => socket.off('screen:stopped', onStopped)
+  }, [isOverlayMode, isConnected, shareId, onLeave])
 
   // Eraser: in overlay mode, route through socket-aware eraseStroke for synced strokes
   useEffect(() => {

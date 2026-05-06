@@ -9,8 +9,12 @@ export function connectSocket() {
 
   const token = localStorage.getItem('token')
 
+  // Polling first, then upgrade to WebSocket. Websocket-first surfaces a hard
+  // 400 on the upgrade probe in some setups (Express 5 + Engine.IO upgrade
+  // handshake); polling-first always succeeds and the upgrade silently falls
+  // back to polling if it fails.
   socket = io(SERVER_URL, {
-    transports: ['websocket', 'polling'],
+    transports: ['polling', 'websocket'],
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,

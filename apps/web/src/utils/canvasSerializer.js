@@ -99,9 +99,15 @@ function findById(canvas, evoId) {
  * @returns {() => void} detach - Call to remove all listeners
  */
 export function attachSerializer(canvas, onOperation, state) {
+  // Overlay strokes are synced via the dedicated overlay:stroke:* protocol
+  // (with normalized coords anchored to the screen-share proxy rect). Skipping
+  // them here prevents duplicate broadcasts via canvas_op.
+  const isOverlayStroke = (target) => target?._evoOverlayStroke || target?._evoOverlayLocal
+
   const onAdded = ({ target }) => {
     if (state._applying) return
     if (target._evoDrawing || target._evoUploading) return // skip in-progress shape drawing and uploading images
+    if (isOverlayStroke(target)) return
     bumpVersion(target)
     incrementSceneVersion(canvas)
     canvas._evoIsDirty = true
@@ -114,6 +120,7 @@ export function attachSerializer(canvas, onOperation, state) {
   const onModified = ({ target }) => {
     if (state._applying) return
     if (target._evoDrawing || target._evoUploading) return // skip
+    if (isOverlayStroke(target)) return
     bumpVersion(target)
     incrementSceneVersion(canvas)
     canvas._evoIsDirty = true
@@ -127,6 +134,7 @@ export function attachSerializer(canvas, onOperation, state) {
   const onRemoved = ({ target }) => {
     if (state._applying) return
     if (target._evoDrawing || target._evoUploading) return // skip temp arrow parts and uploading images
+    if (isOverlayStroke(target)) return
     incrementSceneVersion(canvas)
     canvas._evoIsDirty = true
     onOperation({

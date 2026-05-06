@@ -14,6 +14,7 @@ import Canvas from '../../components/Canvas/Canvas'
 import SettingsPanel, { BG_PRESETS, resolveTheme } from '../../components/SettingsPanel/SettingsPanel'
 import MembersPanel from '../../components/MembersPanel/MembersPanel'
 import ChatPanel from '../../components/ChatPanel/ChatPanel'
+import OpenInAppBanner from '../../components/OpenInAppBanner/OpenInAppBanner'
 import { generateAnonymousName } from '../../utils/nameGenerator'
 import './RoomPage.css'
 
@@ -96,7 +97,7 @@ export default function RoomPage() {
   const screenShareHook = useScreenShare(
     roomCode, username, isConnected, fabricCanvas, room, screenShareLayer
   )
-  const { isSharing, activeShares } = screenShareHook
+  const { isSharing, activeShares, overlayReadyUrl, launchOverlay, dismissOverlay } = screenShareHook
 
   // Overlay strokes
   const { annotatingUser } = useOverlayStrokes(fabricCanvas, roomCode, isConnected)
@@ -213,12 +214,6 @@ export default function RoomPage() {
     navigate('/', { replace: true })
   }
 
-  const handleUsernameChange = (newName) => {
-    setUsername(newName)
-    localStorage.setItem('evodraw_username', newName)
-    updateUsername(newName)
-  }
-
   return (
     <div className="room-page">
       <Canvas
@@ -273,6 +268,10 @@ export default function RoomPage() {
         onChangeFps={handleFpsChange}
       />
 
+      {overlayReadyUrl && (
+        <OpenInAppBanner onLaunch={launchOverlay} onDismiss={dismissOverlay} />
+      )}
+
       {/* Status bar */}
       <div className="room-status-bar">
         <div className={`connection-dot ${isConnected ? 'connected' : 'disconnected'}`} />
@@ -288,7 +287,6 @@ export default function RoomPage() {
         passcode={passcode}
         onLeaveRoom={handleLeaveRoom}
         username={username}
-        onUsernameChange={handleUsernameChange}
         canvasBgId={canvasBgId}
         onBgChange={handleBgChange}
       />

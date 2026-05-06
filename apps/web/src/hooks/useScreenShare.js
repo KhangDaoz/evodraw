@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { RoomEvent, Track } from 'livekit-client'
 import { getSocket } from '../services/socket'
+
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000'
 import {
   createScreenShareOverlay,
   removeScreenShareOverlay,
   removeAllOverlays,
   findScreenShareRect,
 } from '../utils/screenShareObject'
-
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000'
 
 /**
  * Screen share hook — handles both presenting and viewing.
@@ -39,6 +39,7 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000'
 export default function useScreenShare(roomId, username, isConnected, fabricCanvas, room, screenShareLayer) {
   const [isSharing, setIsSharing] = useState(false)
   const [activeShares, setActiveShares] = useState(new Map()) // shareId -> { username }
+  const [overlayReadyUrl, setOverlayReadyUrl] = useState(null)
 
   const localStreamRef = useRef(null)
   const shareIdRef = useRef(null)
@@ -153,8 +154,8 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       console.warn('[ScreenShare] fabricCanvas or screenShareLayer is null — cannot start sharing')
       return
     }
-    if (!room) {
-      console.warn('[ScreenShare] No LiveKit room available')
+    if (!room || room.state !== 'connected') {
+      console.warn('[ScreenShare] LiveKit room not connected (state:', room?.state, ') — cannot share screen')
       return
     }
     console.log('[ScreenShare] Starting screen share...')
@@ -181,21 +182,6 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       shareIdRef.current = shareId
       setIsSharing(true)
 
-      // ── Launch the desktop overlay via deep link ──
-      // Use a hidden iframe to open the protocol without navigating away from the web app.
-      // The desktop app runs independently and connects to the same LiveKit room + server.
-      const token = localStorage.getItem('token')
-      const deepLinkUrl = `evodraw://start?room=${encodeURIComponent(roomId)}&token=${encodeURIComponent(token || '')}&server=${encodeURIComponent(SERVER_URL)}&shareId=${encodeURIComponent(shareId)}&username=${encodeURIComponent(usernameRef.current)}`
-      console.log('[ScreenShare] Launching desktop overlay:', deepLinkUrl)
-
-      // Open without navigating away from the web app
-      const deepLinkAnchor = document.createElement('a')
-      deepLinkAnchor.href = deepLinkUrl
-      deepLinkAnchor.style.display = 'none'
-      document.body.appendChild(deepLinkAnchor)
-      deepLinkAnchor.click()
-      document.body.removeChild(deepLinkAnchor)
-
       // Publish video track to LiveKit (with shareId as track name for remote identification)
       try {
         await room.localParticipant.publishTrack(videoTrack, {
@@ -211,6 +197,17 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
           })
           console.log('[ScreenShare] Audio track published to LiveKit')
         }
+
+        // Precompute the deep link URL so the "Open in EvoDraw" banner button
+        // can fire it as a clean, synchronous user gesture with no awaits.
+        const token = localStorage.getItem('token')
+        setOverlayReadyUrl(
+          `evodraw://start?room=${encodeURIComponent(roomId)}` +
+          `&token=${encodeURIComponent(token || '')}` +
+          `&server=${encodeURIComponent(SERVER_URL)}` +
+          `&shareId=${encodeURIComponent(shareId)}` +
+          `&username=${encodeURIComponent(usernameRef.current)}`
+        )
       } catch (err) {
         console.error('[ScreenShare] Failed to publish track to LiveKit', err)
       }
@@ -281,6 +278,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
 
     shareIdRef.current = null
     setIsSharing(false)
+    setOverlayReadyUrl(null)
   }, [room, roomId, removeShareObject])
 
   // Handle Socket.io signaling events (metadata tracking)
@@ -428,13 +426,27 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const launchOverlay = useCallback(() => {
+    if (!overlayReadyUrl) return
+    // window.open with _blank+noopener launches the protocol handler in an
+    // isolated context so Chrome doesn't enter a "potential navigation" state
+    // on this tab — which was causing the LiveKit signaling WS to drop when
+    // anchor.click() was used instead.
+    window.open(overlayReadyUrl, '_blank', 'noopener,noreferrer')
+    setOverlayReadyUrl(null)
+  }, [overlayReadyUrl])
+
+  const dismissOverlay = useCallback(() => setOverlayReadyUrl(null), [])
+
   return {
     isSharing,
     activeShares,
-    localShareId: shareIdRef.current,
     startSharing,
     stopSharing,
     changeResolution,
     changeFrameRate,
+    overlayReadyUrl,
+    launchOverlay,
+    dismissOverlay,
   }
 }

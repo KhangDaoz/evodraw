@@ -26,8 +26,13 @@ export default function useWebOverlayEmit(canvas, roomId) {
   useEffect(() => {
     if (!canvas || !roomId) return
 
-    const findContainingShareRect = (path) => {
-      // Path's bounding box in scene coordinates
+    // Pick a proxy rect to anchor the stroke against. Strokes whose center
+    // falls inside a rect anchor to that rect (stable behavior). Strokes
+    // outside all rects anchor to the nearest rect by center-to-center
+    // distance — this produces normalized coords outside [0,1], which the
+    // desktop overlay renders off-screen and reveals via pan/zoom in
+    // drawing mode.
+    const findClosestShareRect = (path) => {
       const left = path.left
       const top = path.top
       const right = left + path.width * (path.scaleX || 1)
@@ -35,17 +40,26 @@ export default function useWebOverlayEmit(canvas, roomId) {
       const cx = (left + right) / 2
       const cy = (top + bottom) / 2
 
-      // Iterate proxy rects on canvas
+      let closest = null
+      let closestDist = Infinity
       for (const obj of canvas.getObjects()) {
         if (!obj._evoScreenShare) continue
         const rl = obj.left
         const rt = obj.top
         const rr = rl + obj.width * (obj.scaleX || 1)
         const rb = rt + obj.height * (obj.scaleY || 1)
-        // Center-of-stroke contained → treat as drawn on this share
         if (cx >= rl && cx <= rr && cy >= rt && cy <= rb) return obj
+        const rcx = (rl + rr) / 2
+        const rcy = (rt + rb) / 2
+        const dx = cx - rcx
+        const dy = cy - rcy
+        const d = dx * dx + dy * dy
+        if (d < closestDist) {
+          closestDist = d
+          closest = obj
+        }
       }
-      return null
+      return closest
     }
 
     const normalizePath = (fabricPath, proxyRect) => {
@@ -68,8 +82,8 @@ export default function useWebOverlayEmit(canvas, roomId) {
     //   before:path:created → canvas.add(path) → object:added → path:created
     const onBeforePathCreated = ({ path }) => {
       if (path._evoOverlayStroke) return // already tagged
-      const rect = findContainingShareRect(path)
-      if (!rect) return // regular canvas stroke — normal flow
+      const rect = findClosestShareRect(path)
+      if (!rect) return // no screen share active — keep as regular canvas stroke
 
       const strokeId = `ws-${Date.now()}-${++idCounterRef.current}-${Math.random().toString(36).slice(2, 5)}`
       const shareId = rect._evoShareId

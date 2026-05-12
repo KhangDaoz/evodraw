@@ -88,6 +88,17 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
     window.electronAPI.setIgnoreMouse(next !== 'drawing')
   }, [mode])
 
+  // Snap viewport back to identity when entering working mode so strokes
+  // realign 1:1 with the underlying screen content. Drops any in-progress
+  // draw so the next drawing-mode toggle starts clean.
+  useEffect(() => {
+    if (!fabricCanvas) return
+    if (mode !== 'working') return
+    fabricCanvas.discardActiveObject?.()
+    fabricCanvas.setViewportTransform([1, 0, 0, 1, 0, 0])
+    fabricCanvas.requestRenderAll()
+  }, [fabricCanvas, mode])
+
   const undo = useCallback(() => {
     if (isOverlayMode) {
       overlayUndo()
@@ -151,6 +162,7 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
         strokeOpacity={strokeOpacity}
         strokeStyle={strokeStyle}
         isDrawingActive={isDrawingActive}
+        mode={mode}
         onCanvasReady={onCanvasReady}
       />
 

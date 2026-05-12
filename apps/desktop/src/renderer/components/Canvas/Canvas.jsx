@@ -1,6 +1,7 @@
 import { useRef, useEffect, useImperativeHandle, forwardRef } from 'react'
 import useOverlayCanvas from '../../hooks/useOverlayCanvas'
 import useDrawingTools from '../../hooks/useDrawingTools'
+import useOverlayPanZoom from '../../hooks/useOverlayPanZoom'
 import useHistory from '../../hooks/useHistory'
 import './Canvas.css'
 
@@ -13,6 +14,7 @@ const Canvas = forwardRef(({
   strokeOpacity,
   strokeStyle,
   isDrawingActive = true,
+  mode = 'working',
   onCanvasReady,
 }, ref) => {
   const { fabricCanvas, containerRef, canvasRef } = useOverlayCanvas(screenSize)
@@ -31,6 +33,9 @@ const Canvas = forwardRef(({
     strokeOpacity,
     strokeStyle
   )
+
+  // Right-click drag to pan, wheel to zoom, "0" to reset — only in drawing mode.
+  useOverlayPanZoom(fabricCanvas, mode)
 
   // Disable all interaction when not in drawing mode
   useEffect(() => {

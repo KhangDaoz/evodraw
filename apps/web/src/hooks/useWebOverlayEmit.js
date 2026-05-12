@@ -121,6 +121,8 @@ export default function useWebOverlayEmit(canvas, roomId) {
           color: typeof path.stroke === 'string' ? path.stroke : '#000000',
           width: (path.strokeWidth || 1) / rectW,
           opacity: path.opacity || 1,
+          strokeLineCap: typeof path.strokeLineCap === 'string' ? path.strokeLineCap : 'round',
+          strokeLineJoin: typeof path.strokeLineJoin === 'string' ? path.strokeLineJoin : 'round',
         },
       })
     }

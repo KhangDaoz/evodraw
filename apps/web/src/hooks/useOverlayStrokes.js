@@ -98,6 +98,8 @@ export default function useOverlayStrokes(canvas, roomId, isConnected) {
           hasControls: false,
           hasBorders: false,
           opacity: stroke.opacity || 1,
+          strokeLineCap: stroke.strokeLineCap || 'round',
+          strokeLineJoin: stroke.strokeLineJoin || 'round',
         })
 
         path._evoOverlayStroke = true

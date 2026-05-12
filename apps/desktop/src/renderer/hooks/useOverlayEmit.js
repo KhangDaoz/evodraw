@@ -44,6 +44,8 @@ export default function useOverlayEmit(canvas, roomId, shareId, screenSize) {
           color: path.stroke,
           width: path.strokeWidth / screenW,
           opacity: path.opacity || 1,
+          strokeLineCap: path.strokeLineCap || 'round',
+          strokeLineJoin: path.strokeLineJoin || 'round',
         },
       });
     };
@@ -88,6 +90,8 @@ export default function useOverlayEmit(canvas, roomId, shareId, screenSize) {
           hasControls: false,
           hasBorders: false,
           opacity: stroke.opacity || 1,
+          strokeLineCap: stroke.strokeLineCap || 'round',
+          strokeLineJoin: stroke.strokeLineJoin || 'round',
         });
         path._evoOverlay = true;
         path._evoStrokeId = stroke.id;

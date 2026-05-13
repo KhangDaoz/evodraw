@@ -107,6 +107,7 @@ export default function useDrawingTools(
     const eraseAt = (o) => {
       if (o.target) {
         if (o.target._evoScreenShare) return
+        if (o.target._evoOverlay) return
         if (o.target._evoImage) return
         if (o.target.type === 'i-text') return
         fabricCanvas.remove(o.target)

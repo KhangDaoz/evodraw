@@ -167,12 +167,19 @@ export default function useOverlayStrokes(canvas, roomId, isConnected) {
     // ── Stroke Removed ──
     const onStrokeRemoved = ({ shareId, strokeId }) => {
       const strokes = strokeMapRef.current.get(shareId)
-      if (!strokes) return
-
-      const obj = strokes.get(strokeId)
-      if (obj) {
-        canvas.remove(obj)
+      const tracked = strokes?.get(strokeId)
+      if (tracked) {
+        canvas.remove(tracked)
         strokes.delete(strokeId)
+        canvas.requestRenderAll()
+        return
+      }
+      // Locally-drawn overlay strokes (_evoOverlayLocal) are on the canvas but
+      // not in strokeMapRef. Scan the canvas so desktop-initiated removal still
+      // clears them from the web canvas.
+      const local = canvas.getObjects().find(o => o._evoStrokeId === strokeId)
+      if (local) {
+        canvas.remove(local)
         canvas.requestRenderAll()
       }
     }

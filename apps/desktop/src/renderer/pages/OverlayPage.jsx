@@ -55,17 +55,31 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
     return () => socket.off('screen:stopped', onStopped)
   }, [isOverlayMode, isConnected, shareId, onLeave])
 
-  // Eraser: in overlay mode, route through socket-aware eraseStroke for synced strokes
+  // Eraser: in overlay mode, route through socket-aware eraseStroke for synced strokes.
+  // Handles both click (mouse:down) and drag (mouse:move) so dragging the eraser
+  // across overlay strokes emits overlay:stroke:remove for each one.
   useEffect(() => {
     if (!fabricCanvas || activeTool !== 'eraser' || mode !== 'drawing' || !isOverlayMode) return
-    const onMouseDown = (opt) => {
-      const target = fabricCanvas.findTarget(opt.e)
-      if (!target) return
-      if (target._evoOverlay) eraseStroke(target)
-      // Non-overlay strokes (shapes, text, etc.) fall through to useDrawingTools' eraser
+
+    let erasing = false
+
+    const eraseTarget = (opt) => {
+      const target = opt.target
+      if (target?._evoOverlay) eraseStroke(target)
     }
+
+    const onMouseDown = (opt) => { erasing = true; eraseTarget(opt) }
+    const onMouseMove = (opt) => { if (erasing) eraseTarget(opt) }
+    const onMouseUp   = ()    => { erasing = false }
+
     fabricCanvas.on('mouse:down', onMouseDown)
-    return () => fabricCanvas.off('mouse:down', onMouseDown)
+    fabricCanvas.on('mouse:move', onMouseMove)
+    fabricCanvas.on('mouse:up',   onMouseUp)
+    return () => {
+      fabricCanvas.off('mouse:down', onMouseDown)
+      fabricCanvas.off('mouse:move', onMouseMove)
+      fabricCanvas.off('mouse:up',   onMouseUp)
+    }
   }, [fabricCanvas, activeTool, mode, isOverlayMode, eraseStroke])
 
   // On mount: sync Electron window state with initial React mode

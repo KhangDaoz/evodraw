@@ -3,15 +3,15 @@ import { ensureAuthorizedRoom } from '../utils/guard.js';
 
 export const registerScreenShareHandlers = (io, socket) => {
     // Presenter starts sharing
-    // Expected payload: { roomId: string, shareId: string }
-    socket.on('screen:start', ({ roomId, shareId }) => {
+    // Expected payload: { roomId: string, shareId: string, displaySurface?: string }
+    socket.on('screen:start', ({ roomId, shareId, displaySurface }) => {
         if (!roomId || !shareId) return;
         try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
 
         const username = socket.data.username || 'Anonymous';
 
-        if (!socket.data.shares) socket.data.shares = new Set();
-        socket.data.shares.add(shareId);
+        if (!socket.data.shares) socket.data.shares = new Map();
+        socket.data.shares.set(shareId, { displaySurface });
 
         console.log(`[Screen] ${username} started sharing (${shareId}) in room ${roomId}`);
         markRoomActivity(roomId);
@@ -21,6 +21,7 @@ export const registerScreenShareHandlers = (io, socket) => {
             socketId: socket.id,
             shareId,
             username,
+            displaySurface,
         });
     });
 
@@ -50,11 +51,12 @@ export const registerScreenShareHandlers = (io, socket) => {
             const list = [];
             for (const s of sockets) {
                 if (s.data.shares && s.data.shares.size > 0) {
-                    for (const shareId of s.data.shares) {
+                    for (const shareId of s.data.shares.keys()) {
                         list.push({
                             shareId,
                             socketId: s.id,
-                            username: s.data.username || 'Anonymous'
+                            username: s.data.username || 'Anonymous',
+                            displaySurface: s.data.shares.get(shareId)?.displaySurface,
                         });
                     }
                 }
@@ -72,11 +74,11 @@ export const registerScreenShareHandlers = (io, socket) => {
         if (!roomId || !socket.data.shares || socket.data.shares.size === 0) return;
 
         // Notify room about each stopped share
-        for (const shareId of socket.data.shares) {
+        for (const shareId of socket.data.shares.keys()) {
             io.to(roomId).emit('screen:stopped', { shareId });
             console.log(`[Screen] Auto-stopped share (${shareId}) on disconnect`);
         }
-        
+
         socket.data.shares.clear();
     });
 };

@@ -9,8 +9,10 @@ import { getSocket } from '../services/socket'
  * Strokes arrive with normalized coordinates (0–1) and are mapped to the
  * proxy rect's position and dimensions on the canvas.
  */
-export default function useOverlayStrokes(canvas, roomId, isConnected) {
+export default function useOverlayStrokes(canvas, roomId, isConnected, activeShares) {
   const strokeMapRef = useRef(new Map()) // shareId → Map(strokeId → fabricObj)
+  const activeSharesRef = useRef(activeShares)
+  useEffect(() => { activeSharesRef.current = activeShares }, [activeShares])
   const [annotatingUser, setAnnotatingUser] = useState(null)
   const annotatingTimerRef = useRef(null)
 
@@ -139,6 +141,9 @@ export default function useOverlayStrokes(canvas, roomId, isConnected) {
 
     // ── Stroke Added ──
     const onStrokeAdded = ({ shareId, stroke, username: presenterName }) => {
+      // For whole-screen shares the stroke is already baked into the captured video
+      if (activeSharesRef.current?.get(shareId)?.displaySurface === 'monitor') return
+
       const proxyRect = findProxyRect(shareId)
       if (!proxyRect) {
         console.warn('[OverlayStrokes] No proxy rect for shareId:', shareId)

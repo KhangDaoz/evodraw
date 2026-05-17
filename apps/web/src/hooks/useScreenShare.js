@@ -38,11 +38,14 @@ import {
  */
 export default function useScreenShare(roomId, username, isConnected, fabricCanvas, room, screenShareLayer) {
   const [isSharing, setIsSharing] = useState(false)
-  const [activeShares, setActiveShares] = useState(new Map()) // shareId -> { username }
+  const [activeShares, setActiveShares] = useState(new Map()) // shareId -> { username, displaySurface?, ... }
   const [overlayReadyUrl, setOverlayReadyUrl] = useState(null)
+  const [sharingShareId, setSharingShareId] = useState(null)
+  const [sharingDisplaySurface, setSharingDisplaySurface] = useState(null)
 
   const localStreamRef = useRef(null)
   const shareIdRef = useRef(null)
+  const displaySurfaceRef = useRef(null)
   const videoElementsRef = useRef(new Map()) // shareId -> HTMLVideoElement
   const proxyRectsRef = useRef(new Map()) // shareId -> fabric.Rect
 
@@ -176,11 +179,15 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       }
 
       const audioTrack = stream.getAudioTracks()[0]
+      const displaySurface = videoTrack.getSettings().displaySurface
+      displaySurfaceRef.current = displaySurface
 
       localStreamRef.current = stream
       const shareId = generateShareId()
       shareIdRef.current = shareId
       setIsSharing(true)
+      setSharingShareId(shareId)
+      setSharingDisplaySurface(displaySurface)
 
       // Publish video track to LiveKit (with shareId as track name for remote identification)
       try {
@@ -215,7 +222,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       // Notify room via socket signaling (for metadata tracking)
       const socket = getSocket()
       if (socket) {
-        socket.emit('screen:start', { roomId, shareId })
+        socket.emit('screen:start', { roomId, shareId, displaySurface })
       }
 
       // Create local preview as a DOM overlay
@@ -277,8 +284,11 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     }
 
     shareIdRef.current = null
+    displaySurfaceRef.current = null
     setIsSharing(false)
     setOverlayReadyUrl(null)
+    setSharingShareId(null)
+    setSharingDisplaySurface(null)
   }, [room, roomId, removeShareObject])
 
   // Handle Socket.io signaling events (metadata tracking)
@@ -287,10 +297,10 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     if (!socket || !isConnected) return
 
     // Someone started sharing (socket-based notification)
-    const handleStarted = ({ socketId, shareId, username: sharerName }) => {
+    const handleStarted = ({ socketId, shareId, username: sharerName, displaySurface }) => {
       setActiveShares(prev => {
         const next = new Map(prev)
-        next.set(shareId, { socketId, username: sharerName })
+        next.set(shareId, { ...prev.get(shareId), socketId, username: sharerName, displaySurface })
         return next
       })
     }
@@ -307,11 +317,13 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
 
     // Late joiner: get list of active shares
     const handleActiveList = ({ shares }) => {
-      const map = new Map()
-      for (const s of shares) {
-        map.set(s.shareId, { socketId: s.socketId, username: s.username })
-      }
-      setActiveShares(map)
+      setActiveShares(prev => {
+        const next = new Map()
+        for (const s of shares) {
+          next.set(s.shareId, { ...prev.get(s.shareId), socketId: s.socketId, username: s.username, displaySurface: s.displaySurface })
+        }
+        return next
+      })
     }
 
     socket.on('screen:started', handleStarted)
@@ -368,10 +380,10 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
         setupOverlay(videoEl, shareId, sharerName)
       }
 
-      // Update active shares
+      // Update active shares (merge to preserve fields set by socket events, e.g. displaySurface)
       setActiveShares(prev => {
         const next = new Map(prev)
-        next.set(shareId, { username: sharerName })
+        next.set(shareId, { ...prev.get(shareId), username: sharerName })
         return next
       })
     }
@@ -441,6 +453,8 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
   return {
     isSharing,
     activeShares,
+    sharingShareId,
+    sharingDisplaySurface,
     startSharing,
     stopSharing,
     changeResolution,

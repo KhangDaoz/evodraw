@@ -7,6 +7,7 @@ import useVoiceChat from '../../hooks/useVoiceChat'
 import useScreenShare from '../../hooks/useScreenShare'
 import useScreenShareControls from '../../hooks/useScreenShareControls'
 import useOverlayStrokes from '../../hooks/useOverlayStrokes'
+import useOverlayStrokeRelay from '../../hooks/useOverlayStrokeRelay'
 import { getSocket } from '../../services/socket'
 import Toolbar from '../../components/Toolbar/Toolbar'
 import BottomBar from '../../components/BottomBar/BottomBar'
@@ -97,10 +98,11 @@ export default function RoomPage() {
   const screenShareHook = useScreenShare(
     roomCode, username, isConnected, fabricCanvas, room, screenShareLayer
   )
-  const { isSharing, activeShares, overlayReadyUrl, launchOverlay, dismissOverlay } = screenShareHook
+  const { isSharing, activeShares, sharingShareId, sharingDisplaySurface, overlayReadyUrl, launchOverlay, dismissOverlay } = screenShareHook
 
   // Overlay strokes
-  const { annotatingUser } = useOverlayStrokes(fabricCanvas, roomCode, isConnected)
+  const { annotatingUser } = useOverlayStrokes(fabricCanvas, roomCode, isConnected, activeShares)
+  useOverlayStrokeRelay(fabricCanvas, roomCode, sharingShareId, sharingDisplaySurface)
 
   // Screen share UI controls (resolution, fps, audio)
   const {

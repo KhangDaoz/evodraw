@@ -1,3 +1,4 @@
+require('dotenv').config();
 const {
   app,
   BrowserWindow,
@@ -28,7 +29,7 @@ const store = new Store({
     defaultColor: '#e03131',
     defaultWidth: 4,
     toolbarPosition: 'right',
-    serverUrl: 'http://localhost:4000',
+    serverUrl: process.env.DEFAULT_SERVER_URL || 'http://localhost:4000',
     username: '',
   },
 });
@@ -77,7 +78,7 @@ function handleDeepLink(url) {
     const params = {
       room: parsed.searchParams.get('room'),
       token: parsed.searchParams.get('token'),
-      server: parsed.searchParams.get('server') || store.get('serverUrl', 'http://localhost:4000'),
+      server: parsed.searchParams.get('server') || store.get('serverUrl', process.env.DEFAULT_SERVER_URL || 'http://localhost:4000'),
       shareId: parsed.searchParams.get('shareId'),
       username: parsed.searchParams.get('username'),
     };
@@ -274,7 +275,7 @@ app.whenReady().then(() => {
       pendingDeepLink = {
         room: parsed.searchParams.get('room'),
         token: parsed.searchParams.get('token'),
-        server: parsed.searchParams.get('server') || store.get('serverUrl', 'http://localhost:4000'),
+        server: parsed.searchParams.get('server') || store.get('serverUrl', process.env.DEFAULT_SERVER_URL || 'http://localhost:4000'),
         shareId: parsed.searchParams.get('shareId'),
         username: parsed.searchParams.get('username'),
       };

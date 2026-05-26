@@ -4,7 +4,6 @@ import useDrawingTools from '../../hooks/useDrawingTools'
 import useRemoteCursors from '../../hooks/useRemoteCursors'
 import useHistory from '../../hooks/useHistory'
 import useImagePasting from '../../hooks/useImagePasting'
-import useWebOverlayEmit from '../../hooks/useWebOverlayEmit'
 
 import { useRef, useImperativeHandle, forwardRef } from 'react'
 import './Canvas.css'
@@ -38,13 +37,8 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
     strokeColor,
     strokeWidth,
     strokeOpacity,
-    strokeStyle,
-    roomId
+    strokeStyle
   )
-
-  // Pen strokes drawn over a screen-share proxy rect get re-routed through
-  // the overlay protocol so the presenter's desktop overlay receives them.
-  useWebOverlayEmit(fabricCanvas, roomId)
 
   // Remote cursor sync + coordinate conversion
   const { remoteCursors, sceneToScreen, viewportVersion, getCursorColor } =

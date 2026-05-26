@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import * as fabric from 'fabric'
-import { getSocket } from '../services/socket'
 
 const hexToRgba = (hex, opacity) => {
   if (!hex) return `rgba(0, 0, 0, ${opacity})`
@@ -42,8 +41,7 @@ export default function useDrawingTools(
   strokeColor,
   strokeWidth,
   strokeOpacity = 1,
-  strokeStyle = 'solid',
-  roomId = null
+  strokeStyle = 'solid'
 ) {
   useEffect(() => {
     if (!fabricCanvas) return
@@ -101,15 +99,6 @@ export default function useDrawingTools(
     fabricCanvas.skipTargetFind = !canSelect && !isEraser && !isText
 
     fabricCanvas.forEachObject(obj => {
-      if (obj._evoOverlayStroke) {
-        // Overlay strokes are anchored to the screen-share proxy rect — users
-        // must not be able to select, drag, or resize them. We keep `evented`
-        // on so the eraser's findTarget can still pick them up; `selectable`
-        // false + the no-controls/no-borders flags on the original creation
-        // prevent drag handles from appearing.
-        obj.set({ selectable: false, evented: true })
-        return
-      }
       obj.set({
         selectable: canSelect,
         evented: canSelect || isEraser,
@@ -142,20 +131,6 @@ export default function useDrawingTools(
       if (target._evoScreenShare) return
       if (target._evoImage) return
       if (target.type === 'i-text') return
-
-      // Overlay strokes from the desktop app: broadcast removal so the desktop
-      // and other web peers also drop the stroke. Without this emit, only the
-      // local web canvas reflects the erase.
-      if (target._evoOverlayStroke && target._evoStrokeId && target._evoShareId) {
-        const socket = getSocket()
-        if (socket?.connected && roomId) {
-          socket.emit('overlay:stroke:remove', {
-            roomId,
-            shareId: target._evoShareId,
-            strokeId: target._evoStrokeId,
-          })
-        }
-      }
 
       fabricCanvas.remove(target)
       fabricCanvas.requestRenderAll()
@@ -423,6 +398,5 @@ export default function useDrawingTools(
     strokeWidth,
     strokeOpacity,
     strokeStyle,
-    roomId,
   ])
 }

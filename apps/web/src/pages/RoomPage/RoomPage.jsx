@@ -6,8 +6,6 @@ import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import useVoiceChat from '../../hooks/useVoiceChat'
 import useScreenShare from '../../hooks/useScreenShare'
 import useScreenShareControls from '../../hooks/useScreenShareControls'
-import useOverlayStrokes from '../../hooks/useOverlayStrokes'
-import useOverlayStrokeRelay from '../../hooks/useOverlayStrokeRelay'
 import { getSocket } from '../../services/socket'
 import Toolbar from '../../components/Toolbar/Toolbar'
 import BottomBar from '../../components/BottomBar/BottomBar'
@@ -98,11 +96,7 @@ export default function RoomPage() {
   const screenShareHook = useScreenShare(
     roomCode, username, isConnected, fabricCanvas, room, screenShareLayer
   )
-  const { isSharing, activeShares, sharingShareId, sharingDisplaySurface, overlayReadyUrl, launchOverlay, dismissOverlay } = screenShareHook
-
-  // Overlay strokes
-  const { annotatingUser } = useOverlayStrokes(fabricCanvas, roomCode, isConnected, activeShares)
-  useOverlayStrokeRelay(fabricCanvas, roomCode, sharingShareId, sharingDisplaySurface)
+  const { isSharing, activeShares, overlayReadyUrl, launchOverlay, dismissOverlay } = screenShareHook
 
   // Screen share UI controls (resolution, fps, audio)
   const {
@@ -334,30 +328,6 @@ export default function RoomPage() {
             <span>Just now</span>
           </div>
           <div className="chat-toast-body">{toastMessage.text}</div>
-        </div>
-      )}
-
-      {/* Overlay Annotation Indicator */}
-      {annotatingUser && (
-        <div className="annotation-toast animate-fade-in" style={{
-          position: 'absolute',
-          top: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: 'rgba(224, 49, 49, 0.9)',
-          color: 'white',
-          padding: '8px 16px',
-          borderRadius: '20px',
-          fontWeight: 'bold',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          zIndex: 1000,
-          pointerEvents: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <span style={{ fontSize: '1.2em' }}>✏️</span>
-          {annotatingUser} is annotating...
         </div>
       )}
 

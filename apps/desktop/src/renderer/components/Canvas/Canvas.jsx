@@ -3,6 +3,7 @@ import useOverlayCanvas from '../../hooks/useOverlayCanvas'
 import useDrawingTools from '../../hooks/useDrawingTools'
 import useOverlayPanZoom from '../../hooks/useOverlayPanZoom'
 import useHistory from '../../hooks/useHistory'
+import useCanvasSync from '../../hooks/useCanvasSync'
 import './Canvas.css'
 
 const Canvas = forwardRef(({
@@ -16,11 +17,17 @@ const Canvas = forwardRef(({
   isDrawingActive = true,
   mode = 'working',
   onCanvasReady,
+  roomId,
+  isConnected,
 }, ref) => {
   const { fabricCanvas, containerRef, canvasRef } = useOverlayCanvas(screenSize)
   const syncState = useRef({ _applying: false })
 
-  // Local undo/redo for non-overlay flows; OverlayPage uses useOverlayEmit.undo for socket-aware undo.
+  // Join the shared room canvas: load snapshot, send/receive canvas_op, push
+  // periodic snapshots. Desktop overlay is just another viewport onto the
+  // same scene — no overlay-specific protocol.
+  useCanvasSync(fabricCanvas, syncState, roomId, isConnected, null, null, null)
+
   const { undo, redo } = useHistory(fabricCanvas, syncState)
 
   // Drawing tools: pen / eraser / shapes / line / arrow / text

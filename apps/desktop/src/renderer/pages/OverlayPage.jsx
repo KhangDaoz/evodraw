@@ -5,7 +5,6 @@ import ChatPanel from '../components/ChatPanel/ChatPanel'
 import SettingsPanel from '../components/SettingsPanel/SettingsPanel'
 import useRoom from '../hooks/useRoom'
 import useChat from '../hooks/useChat'
-import useOverlayEmit from '../hooks/useOverlayEmit'
 import { getSocket } from '../services/socket'
 
 const SYNCING_TOOLS = new Set(['pen', 'eraser', 'select'])
@@ -34,8 +33,6 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
   const { isConnected, connectedUsers, error: roomError, updateUsername } =
     useRoom(serverUrl, roomId, username)
   const { messages, sendMessage } = useChat(roomId, username)
-  const { undo: overlayUndo, clearAll: overlayClearAll, eraseStroke } =
-    useOverlayEmit(isOverlayMode ? fabricCanvas : null, roomId, shareId, screenSize)
 
   const onCanvasReady = useCallback((fc) => setFabricCanvas(fc), [])
 
@@ -54,33 +51,6 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
     socket.on('screen:stopped', onStopped)
     return () => socket.off('screen:stopped', onStopped)
   }, [isOverlayMode, isConnected, shareId, onLeave])
-
-  // Eraser: in overlay mode, route through socket-aware eraseStroke for synced strokes.
-  // Handles both click (mouse:down) and drag (mouse:move) so dragging the eraser
-  // across overlay strokes emits overlay:stroke:remove for each one.
-  useEffect(() => {
-    if (!fabricCanvas || activeTool !== 'eraser' || mode !== 'drawing' || !isOverlayMode) return
-
-    let erasing = false
-
-    const eraseTarget = (opt) => {
-      const target = opt.target
-      if (target?._evoOverlay) eraseStroke(target)
-    }
-
-    const onMouseDown = (opt) => { erasing = true; eraseTarget(opt) }
-    const onMouseMove = (opt) => { if (erasing) eraseTarget(opt) }
-    const onMouseUp   = ()    => { erasing = false }
-
-    fabricCanvas.on('mouse:down', onMouseDown)
-    fabricCanvas.on('mouse:move', onMouseMove)
-    fabricCanvas.on('mouse:up',   onMouseUp)
-    return () => {
-      fabricCanvas.off('mouse:down', onMouseDown)
-      fabricCanvas.off('mouse:move', onMouseMove)
-      fabricCanvas.off('mouse:up',   onMouseUp)
-    }
-  }, [fabricCanvas, activeTool, mode, isOverlayMode, eraseStroke])
 
   // On mount: sync Electron window state with initial React mode
   useEffect(() => {
@@ -114,21 +84,14 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
   }, [fabricCanvas, mode])
 
   const undo = useCallback(() => {
-    if (isOverlayMode) {
-      overlayUndo()
-    } else {
-      canvasRef.current?.undo()
-    }
-  }, [isOverlayMode, overlayUndo])
+    canvasRef.current?.undo()
+  }, [])
 
   const handleClearAll = useCallback(() => {
-    if (isOverlayMode) {
-      overlayClearAll()
-    } else if (fabricCanvas) {
-      fabricCanvas.getObjects().slice().forEach(obj => fabricCanvas.remove(obj))
-      fabricCanvas.requestRenderAll()
-    }
-  }, [isOverlayMode, overlayClearAll, fabricCanvas])
+    if (!fabricCanvas) return
+    fabricCanvas.getObjects().slice().forEach(obj => fabricCanvas.remove(obj))
+    fabricCanvas.requestRenderAll()
+  }, [fabricCanvas])
 
   const handleLeave = useCallback(() => {
     onLeave()
@@ -144,16 +107,10 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
     const onKey = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
       if (e.key === 'Escape') setActiveTool('select')
-      // Override Ctrl+Z in overlay mode to use socket-aware undo
-      if (isOverlayMode && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        e.stopPropagation()
-        overlayUndo()
-      }
     }
     window.addEventListener('keydown', onKey, { capture: true })
     return () => window.removeEventListener('keydown', onKey, { capture: true })
-  }, [isOverlayMode, overlayUndo])
+  }, [])
 
   // Hover-to-interact: temporarily disable click-through over UI elements
   const onInteractiveEnter = () => window.electronAPI.setIgnoreMouse(false)
@@ -178,6 +135,8 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
         isDrawingActive={isDrawingActive}
         mode={mode}
         onCanvasReady={onCanvasReady}
+        roomId={roomId}
+        isConnected={isConnected}
       />
 
       <div className={`mode-indicator ${mode}`}>

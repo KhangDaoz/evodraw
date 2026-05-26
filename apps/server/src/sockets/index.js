@@ -2,7 +2,6 @@ import { registerRoomHandlers } from './room.handler.js';
 import { registerDrawHandlers } from './draw.handler.js';
 import { registerChatHandlers } from './chat.handler.js';
 import { registerScreenShareHandlers } from './screen.handler.js';
-import { registerOverlayHandlers } from './overlay.handler.js';
 import { verifyToken } from '../services/token.service.js';
 
 export const initializeSockets = (io) => {
@@ -34,7 +33,6 @@ export const initializeSockets = (io) => {
         registerDrawHandlers(io, socket);
         registerChatHandlers(io, socket);
         registerScreenShareHandlers(io, socket);
-        registerOverlayHandlers(io, socket);
 
         socket.on('disconnect', () => {
             console.log(`Client disconnected: ${socket.id}`);

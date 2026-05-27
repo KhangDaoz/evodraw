@@ -58,10 +58,12 @@ export function getSceneVersion(canvas) {
 }
 
 // Serialize a single Fabric object → plain JSON payload (with version metadata)
+// NOTE: Fabric v6's `toJSON()` ignores its argument (just calls `toObject()`);
+// use `toObject(CUSTOM_PROPS)` so screen-share / image flags survive the wire.
 function serializeObject(obj) {
   ensureId(obj)
   ensureVersion(obj)
-  const json = obj.toJSON(CUSTOM_PROPS)
+  const json = obj.toObject(CUSTOM_PROPS)
   json._evoId = obj._evoId
   json._evoVersion = obj._evoVersion
   json._evoNonce = obj._evoNonce

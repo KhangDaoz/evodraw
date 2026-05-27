@@ -186,3 +186,30 @@ html, body, #root {
   background: rgba(124, 120, 240, 0.7);
   color: #fff;
 }
+
+/* === Snap FAB — locks viewport onto the screen-share rect === */
+.snap-fab {
+  position: fixed;
+  bottom: 12px; right: 112px;
+  z-index: 300;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-light);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  transition: background 0.15s, transform 0.15s, color 0.15s;
+}
+.snap-fab:hover {
+  background: rgba(47, 158, 68, 0.5);
+  color: #fff;
+  transform: scale(1.08);
+}
+.snap-fab.active {
+  background: rgba(47, 158, 68, 0.7);
+  color: #fff;
+}

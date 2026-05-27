@@ -19,6 +19,7 @@ const Canvas = forwardRef(({
   onCanvasReady,
   roomId,
   isConnected,
+  onUserViewport,
 }, ref) => {
   const { fabricCanvas, containerRef, canvasRef } = useOverlayCanvas(screenSize)
   const syncState = useRef({ _applying: false })
@@ -42,7 +43,9 @@ const Canvas = forwardRef(({
   )
 
   // Right-click drag to pan, wheel to zoom, "0" to reset — only in drawing mode.
-  useOverlayPanZoom(fabricCanvas, mode)
+  // onUserViewport fires when user manipulates viewport, so OverlayPage can
+  // unlock its share-rect viewport lock.
+  useOverlayPanZoom(fabricCanvas, mode, onUserViewport)
 
   // Disable all interaction when not in drawing mode
   useEffect(() => {

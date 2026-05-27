@@ -9,7 +9,6 @@ import {
 } from '../utils/canvasSerializer'
 
 const SNAPSHOT_PUSH_INTERVAL_MS = 10_000
-const SERVER_SNAPSHOT_TIMEOUT_MS = 2000
 
 /**
  * Connects a Fabric canvas to the Socket.IO room for
@@ -64,10 +63,18 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
     }
 
     const onStateInit = async ({ snapshot }) => {
-      if (snapshotLoadedRef.current) return // Server snapshot already loaded
       if (snapshot?.objects?.length > 0) {
-        snapshotLoadedRef.current = true
-        await loadCanvasSnapshot(canvas, snapshot, syncState.current)
+        if (snapshotLoadedRef.current) {
+          // Server snapshot already loaded — merge peer-only objects via LWW
+          // (e.g. screen-share rects, which are excluded from MongoDB snapshots)
+          for (const json of snapshot.objects) {
+            await applyRemoteOp(canvas, { type: 'object:added', object: json }, syncState.current)
+          }
+          canvas.requestRenderAll()
+        } else {
+          snapshotLoadedRef.current = true
+          await loadCanvasSnapshot(canvas, snapshot, syncState.current)
+        }
       }
       if (snapshot?.bgId && snapshot?.bgColor && onBgColorReceived) {
         onBgColorReceived(snapshot.bgId, snapshot.bgColor)
@@ -83,16 +90,11 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
     socket.on('canvas_state_init', onStateInit)
 
     // ── Recovery flow ──
-    // 1. Ask server for stored snapshot first
+    // Ask server for stored snapshot AND peers in parallel.
+    // onStateInit merges via LWW so peer state works alongside server snapshot
+    // (needed for screen-share rects which never enter MongoDB snapshots).
     socket.emit('request_snapshot', { roomId })
-
-    // 2. After timeout, if server didn't respond, ask peers
-    const peerFallbackTimer = setTimeout(() => {
-      if (!snapshotLoadedRef.current) {
-        console.log('[Sync] No server snapshot, requesting from peers...')
-        socket.emit('canvas_state_request', { roomId })
-      }
-    }, SERVER_SNAPSHOT_TIMEOUT_MS)
+    socket.emit('canvas_state_request', { roomId })
 
     // ── Periodic snapshot push (dirty flag) ──
     const pushInterval = setInterval(() => {
@@ -111,7 +113,6 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
 
     return () => {
       detach()
-      clearTimeout(peerFallbackTimer)
       clearInterval(pushInterval)
       socket.off('canvas_op_received', onRemoteOp)
       socket.off('snapshot_loaded', onSnapshotLoaded)

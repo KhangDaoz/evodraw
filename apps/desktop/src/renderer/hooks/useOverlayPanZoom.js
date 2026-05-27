@@ -14,12 +14,15 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
  * resetting the viewport when switching modes; this hook only attaches
  * gesture listeners.
  */
-export default function useOverlayPanZoom(fabricCanvas, mode) {
+export default function useOverlayPanZoom(fabricCanvas, mode, onUserViewport) {
   const resetView = useCallback(() => {
     if (!fabricCanvas) return
     fabricCanvas.setViewportTransform([1, 0, 0, 1, 0, 0])
     fabricCanvas.requestRenderAll()
   }, [fabricCanvas])
+
+  const onUserViewportRef = useRef(onUserViewport)
+  useEffect(() => { onUserViewportRef.current = onUserViewport }, [onUserViewport])
 
   const panStateRef = useRef(null)
 
@@ -39,6 +42,7 @@ export default function useOverlayPanZoom(fabricCanvas, mode) {
       if (newZoom === currentZoom) return
       const point = fabricCanvas.getScenePoint(e)
       fabricCanvas.zoomToPoint(point, newZoom)
+      onUserViewportRef.current?.()
     }
 
     const onWindowMouseMove = (e) => {
@@ -74,6 +78,7 @@ export default function useOverlayPanZoom(fabricCanvas, mode) {
       upperEl.style.cursor = 'grabbing'
       window.addEventListener('mousemove', onWindowMouseMove)
       window.addEventListener('mouseup', stopPan)
+      onUserViewportRef.current?.()
     }
 
     const onContextMenu = (e) => e.preventDefault()
@@ -84,6 +89,7 @@ export default function useOverlayPanZoom(fabricCanvas, mode) {
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       e.preventDefault()
       resetView()
+      onUserViewportRef.current?.()
     }
 
     upperEl.addEventListener('wheel', onWheel, { passive: false })

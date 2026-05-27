@@ -29,6 +29,10 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
   // Panel state
   const [chatOpen, setChatOpen] = useState(false)
 
+  // Viewport lock to the share's proxy rect. Default ON when overlay launches
+  // for a share. User pan/zoom unlocks; Snap button re-locks.
+  const [viewportLocked, setViewportLocked] = useState(isOverlayMode)
+
   // Hooks
   const { isConnected, connectedUsers, error: roomError, updateUsername } =
     useRoom(serverUrl, roomId, username)
@@ -72,16 +76,51 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
     window.electronAPI.setIgnoreMouse(next !== 'drawing')
   }, [mode])
 
-  // Snap viewport back to identity when entering working mode so strokes
-  // realign 1:1 with the underlying screen content. Drops any in-progress
-  // draw so the next drawing-mode toggle starts clean.
+  // Lock viewport to the screen-share proxy rect so a stroke drawn at
+  // scene-coord (px, py) inside the rect appears at the corresponding
+  // pixel on the desktop's screen. Uses after:render polling since
+  // applyRemoteOp mutates objects without firing 'object:modified'.
   useEffect(() => {
-    if (!fabricCanvas) return
-    if (mode !== 'working') return
-    fabricCanvas.discardActiveObject?.()
-    fabricCanvas.setViewportTransform([1, 0, 0, 1, 0, 0])
-    fabricCanvas.requestRenderAll()
-  }, [fabricCanvas, mode])
+    if (!fabricCanvas || !shareId || !screenSize?.width || !screenSize?.height) return
+    if (!viewportLocked) return
+
+    let lastSig = null
+
+    const findRect = () =>
+      fabricCanvas.getObjects().find(o => o._evoScreenShare && o._evoShareId === shareId) || null
+
+    const applyViewport = () => {
+      const rect = findRect()
+      if (!rect) return
+      if (rect.selectable !== false) {
+        rect.set({ selectable: false, evented: false, hasControls: false, hoverCursor: 'default' })
+      }
+      const w = rect.width * (rect.scaleX || 1)
+      const h = rect.height * (rect.scaleY || 1)
+      if (!w || !h) return
+      const sig = `${rect.left.toFixed(2)},${rect.top.toFixed(2)},${w.toFixed(2)},${h.toFixed(2)}`
+      if (sig === lastSig) return
+      lastSig = sig
+      const sx = screenSize.width / w
+      const sy = screenSize.height / h
+      fabricCanvas.discardActiveObject?.()
+      fabricCanvas.setViewportTransform([sx, 0, 0, sy, -rect.left * sx, -rect.top * sy])
+      fabricCanvas.requestRenderAll()
+    }
+
+    applyViewport()
+    fabricCanvas.on('after:render', applyViewport)
+    fabricCanvas.on('object:added', applyViewport)
+    fabricCanvas.on('object:removed', applyViewport)
+    return () => {
+      fabricCanvas.off('after:render', applyViewport)
+      fabricCanvas.off('object:added', applyViewport)
+      fabricCanvas.off('object:removed', applyViewport)
+    }
+  }, [fabricCanvas, shareId, screenSize, viewportLocked])
+
+  const handleUserViewport = useCallback(() => setViewportLocked(false), [])
+  const handleSnap = useCallback(() => setViewportLocked(true), [])
 
   const undo = useCallback(() => {
     canvasRef.current?.undo()
@@ -137,6 +176,7 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
         onCanvasReady={onCanvasReady}
         roomId={roomId}
         isConnected={isConnected}
+        onUserViewport={handleUserViewport}
       />
 
       <div className={`mode-indicator ${mode}`}>
@@ -222,6 +262,25 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
             : roomError || 'Connecting…'}
         </span>
       </div>
+
+      {isOverlayMode && (
+        <button
+          className={`snap-fab${viewportLocked ? ' active' : ''}`}
+          title="Snap viewport to screen-share rect"
+          onClick={handleSnap}
+          onMouseEnter={onInteractiveEnter}
+          onMouseLeave={onInteractiveLeave}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 3v3" />
+            <path d="M12 18v3" />
+            <path d="M3 12h3" />
+            <path d="M18 12h3" />
+          </svg>
+        </button>
+      )}
 
       <button
         className="mode-toggle-fab"

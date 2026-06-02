@@ -40,6 +40,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
   const [isSharing, setIsSharing] = useState(false)
   const [activeShares, setActiveShares] = useState(new Map()) // shareId -> { username, displaySurface?, ... }
   const [overlayReadyUrl, setOverlayReadyUrl] = useState(null)
+  const [showInstallHint, setShowInstallHint] = useState(false)
   const [sharingShareId, setSharingShareId] = useState(null)
   const [sharingDisplaySurface, setSharingDisplaySurface] = useState(null)
 
@@ -440,15 +441,17 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
 
   const launchOverlay = useCallback(() => {
     if (!overlayReadyUrl) return
-    // window.open with _blank+noopener launches the protocol handler in an
-    // isolated context so Chrome doesn't enter a "potential navigation" state
-    // on this tab — which was causing the LiveKit signaling WS to drop when
-    // anchor.click() was used instead.
-    window.open(overlayReadyUrl, '_blank', 'noopener,noreferrer')
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;opacity:0'
+    iframe.src = overlayReadyUrl
+    document.body.appendChild(iframe)
+    setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe) }, 1500)
     setOverlayReadyUrl(null)
+    setShowInstallHint(true)
   }, [overlayReadyUrl])
 
   const dismissOverlay = useCallback(() => setOverlayReadyUrl(null), [])
+  const dismissInstallHint = useCallback(() => setShowInstallHint(false), [])
 
   return {
     isSharing,
@@ -462,5 +465,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     overlayReadyUrl,
     launchOverlay,
     dismissOverlay,
+    showInstallHint,
+    dismissInstallHint,
   }
 }

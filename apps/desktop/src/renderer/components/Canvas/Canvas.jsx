@@ -39,7 +39,8 @@ const Canvas = forwardRef(({
     strokeColor,
     strokeWidth,
     strokeOpacity,
-    strokeStyle
+    strokeStyle,
+    isDrawingActive
   )
 
   // Right-click drag to pan, wheel to zoom, "0" to reset — only in drawing mode.

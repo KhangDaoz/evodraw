@@ -87,6 +87,7 @@ function handleDeepLink(url) {
 
     if (overlayWindow && overlayWindow.webContents) {
       overlayWindow.show();
+      overlayWindow.setContentProtection(true);
       // TEMP DEBUG — open DevTools when the overlay surfaces so we can see renderer errors
       overlayWindow.webContents.openDevTools({ mode: 'detach' });
       overlayWindow.webContents.send('deep-link', params);
@@ -246,6 +247,7 @@ function setupIPC() {
     pendingDeepLink = null;
     if (params && overlayWindow) {
       overlayWindow.show();
+      overlayWindow.setContentProtection(true);
       // TEMP DEBUG
       overlayWindow.webContents.openDevTools({ mode: 'detach' });
     }

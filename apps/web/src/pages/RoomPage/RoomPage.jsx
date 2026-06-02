@@ -14,6 +14,7 @@ import SettingsPanel, { BG_PRESETS, resolveTheme } from '../../components/Settin
 import MembersPanel from '../../components/MembersPanel/MembersPanel'
 import ChatPanel from '../../components/ChatPanel/ChatPanel'
 import OpenInAppBanner from '../../components/OpenInAppBanner/OpenInAppBanner'
+import DesktopInstallHint from '../../components/OpenInAppBanner/DesktopInstallHint'
 import { generateAnonymousName } from '../../utils/nameGenerator'
 import './RoomPage.css'
 
@@ -96,7 +97,7 @@ export default function RoomPage() {
   const screenShareHook = useScreenShare(
     roomCode, username, isConnected, fabricCanvas, room, screenShareLayer
   )
-  const { isSharing, activeShares, overlayReadyUrl, launchOverlay, dismissOverlay } = screenShareHook
+  const { isSharing, activeShares, overlayReadyUrl, launchOverlay, dismissOverlay, showInstallHint, dismissInstallHint } = screenShareHook
 
   // Screen share UI controls (resolution, fps, audio)
   const {
@@ -266,6 +267,10 @@ export default function RoomPage() {
 
       {overlayReadyUrl && (
         <OpenInAppBanner onLaunch={launchOverlay} onDismiss={dismissOverlay} />
+      )}
+
+      {showInstallHint && (
+        <DesktopInstallHint onDismiss={dismissInstallHint} />
       )}
 
       {/* Status bar */}

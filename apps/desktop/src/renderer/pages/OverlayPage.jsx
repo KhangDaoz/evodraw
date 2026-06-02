@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Canvas from '../components/Canvas/Canvas'
 import Toolbar from '../components/Toolbar/Toolbar'
 import ChatPanel from '../components/ChatPanel/ChatPanel'
-import SettingsPanel from '../components/SettingsPanel/SettingsPanel'
 import useRoom from '../hooks/useRoom'
 import useChat from '../hooks/useChat'
 import { getSocket } from '../services/socket'
@@ -34,7 +33,7 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
   const [viewportLocked, setViewportLocked] = useState(isOverlayMode)
 
   // Hooks
-  const { isConnected, connectedUsers, error: roomError, updateUsername } =
+  const { isConnected, connectedUsers, error: roomError } =
     useRoom(serverUrl, roomId, username)
   const { messages, sendMessage } = useChat(roomId, username)
 
@@ -136,11 +135,6 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
     onLeave()
   }, [onLeave])
 
-  const handleUsernameChange = useCallback((next) => {
-    setUsername(next)
-    if (updateUsername) updateUsername(next)
-  }, [updateUsername])
-
   // Keyboard: Esc → select tool (Ctrl+Z is handled by useHistory + useDrawingTools)
   useEffect(() => {
     const onKey = (e) => {
@@ -159,6 +153,11 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
 
   const isDrawingActive = mode === 'drawing'
   const showLocalOnlyNote = isOverlayMode && !SYNCING_TOOLS.has(activeTool)
+
+  // Auto-close chat when switching to working mode
+  useEffect(() => {
+    if (!isDrawingActive) setChatOpen(false)
+  }, [isDrawingActive])
 
   return (
     <div className="overlay-root">
@@ -220,16 +219,6 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
         )}
       </Toolbar>
 
-      <SettingsPanel
-        roomCode={roomId}
-        passcode={null}
-        username={username}
-        onUsernameChange={handleUsernameChange}
-        onLeaveRoom={handleLeave}
-        onMouseEnter={onInteractiveEnter}
-        onMouseLeave={onInteractiveLeave}
-      />
-
       {chatOpen && (
         <ChatPanel
           messages={messages}
@@ -240,7 +229,7 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
         />
       )}
 
-      <button
+      {isDrawingActive && <button
         className={`chat-toggle-fab${chatOpen ? ' active' : ''}`}
         title="Toggle chat"
         onClick={() => setChatOpen(o => !o)}
@@ -250,7 +239,7 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
-      </button>
+      </button>}
 
       <div
         className={`connection-status${isConnected ? ' connected' : roomError ? ' error' : ''}`}
@@ -263,7 +252,7 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
         </span>
       </div>
 
-      {isOverlayMode && (
+      {isOverlayMode && isDrawingActive && (
         <button
           className={`snap-fab${viewportLocked ? ' active' : ''}`}
           title="Snap viewport to screen-share rect"

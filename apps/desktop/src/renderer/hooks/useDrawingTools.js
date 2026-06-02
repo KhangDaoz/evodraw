@@ -33,7 +33,8 @@ export default function useDrawingTools(
   strokeColor,
   strokeWidth,
   strokeOpacity = 1,
-  strokeStyle = 'solid'
+  strokeStyle = 'solid',
+  isDrawingActive = true
 ) {
   useEffect(() => {
     if (!fabricCanvas) return
@@ -360,5 +361,6 @@ export default function useDrawingTools(
     strokeWidth,
     strokeOpacity,
     strokeStyle,
+    isDrawingActive,
   ])
 }

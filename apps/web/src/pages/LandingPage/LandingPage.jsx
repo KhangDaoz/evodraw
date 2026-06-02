@@ -115,6 +115,16 @@ export default function LandingPage() {
 
             {error && <p className="welcome-error">{error}</p>}
 
+            <button
+              className="create-room-btn"
+              onClick={handleInteractionCreateRoom}
+              disabled={loading}
+            >
+              {loading ? '...' : 'Create new room'}
+            </button>
+
+            <div className="welcome-divider"><span>or join existing</span></div>
+
             <form className="welcome-form" onSubmit={handleJoinRoom}>
               <input
                 type="text"

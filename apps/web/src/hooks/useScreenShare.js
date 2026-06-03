@@ -210,12 +210,22 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
         // Precompute the deep link URL so the "Open in EvoDraw" banner button
         // can fire it as a clean, synchronous user gesture with no awaits.
         const token = localStorage.getItem('token')
+        let captureX = 0
+        let captureY = 0
+        if (displaySurface === 'browser') {
+          // Estimate where the tab's viewport starts on the physical screen.
+          // outerHeight - innerHeight captures the browser chrome (tabs + address bar).
+          captureX = Math.round(window.screenX + (window.outerWidth - window.innerWidth) / 2)
+          captureY = Math.round(window.screenY + (window.outerHeight - window.innerHeight))
+        }
         setOverlayReadyUrl(
           `evodraw://start?room=${encodeURIComponent(roomId)}` +
           `&token=${encodeURIComponent(token || '')}` +
           `&server=${encodeURIComponent(SERVER_URL)}` +
           `&shareId=${encodeURIComponent(shareId)}` +
-          `&username=${encodeURIComponent(usernameRef.current)}`
+          `&username=${encodeURIComponent(usernameRef.current)}` +
+          `&displaySurface=${encodeURIComponent(displaySurface || '')}` +
+          `&captureX=${captureX}&captureY=${captureY}`
         )
       } catch (err) {
         console.error('[ScreenShare] Failed to publish track to LiveKit', err)

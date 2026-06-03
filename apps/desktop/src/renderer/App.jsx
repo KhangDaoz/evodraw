@@ -44,6 +44,9 @@ export default function App() {
       username: params.username || 'Presenter',
       shareId: params.shareId || null,
       fromDeepLink: true,
+      displaySurface: params.displaySurface || 'monitor',
+      captureX: params.captureX || 0,
+      captureY: params.captureY || 0,
     });
     window.electronAPI.notifyRoomState({ inRoom: true });
     if (params.shareId) {

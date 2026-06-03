@@ -9,7 +9,7 @@ import { getSocket } from '../services/socket'
 const SYNCING_TOOLS = new Set(['pen', 'eraser', 'select'])
 
 export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }) {
-  const { roomId, username: initialUsername, shareId } = roomInfo
+  const { roomId, username: initialUsername, shareId, displaySurface, captureX, captureY } = roomInfo
   const isOverlayMode = !!shareId
   console.log('[OverlayPage] mount', { roomId, shareId, isOverlayMode, screenSize })
 
@@ -107,10 +107,20 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
       const sig = `${rect.left.toFixed(2)},${rect.top.toFixed(2)},${w.toFixed(2)},${h.toFixed(2)}`
       if (sig === lastSig) return
       lastSig = sig
-      const sx = screenSize.width / w
-      const sy = screenSize.height / h
+      // For monitor captures the video spans the full screen, so use screenSize.
+      // For window/browser the video spans only the captured area (rect.width × rect.height),
+      // so use those dimensions to get the correct scale. captureX/Y offsets the translation
+      // to account for where the capture area starts on the desktop screen.
+      const captureW = displaySurface === 'monitor' ? screenSize.width : rect.width
+      const captureH = displaySurface === 'monitor' ? screenSize.height : rect.height
+      const sx = captureW / w
+      const sy = captureH / h
       fabricCanvas.discardActiveObject?.()
-      fabricCanvas.setViewportTransform([sx, 0, 0, sy, -rect.left * sx, -rect.top * sy])
+      fabricCanvas.setViewportTransform([
+        sx, 0, 0, sy,
+        (captureX || 0) - rect.left * sx,
+        (captureY || 0) - rect.top * sy,
+      ])
       fabricCanvas.requestRenderAll()
     }
 
@@ -123,7 +133,7 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
       fabricCanvas.off('object:added', applyViewport)
       fabricCanvas.off('object:removed', applyViewport)
     }
-  }, [fabricCanvas, shareId, screenSize, viewportLocked])
+  }, [fabricCanvas, shareId, screenSize, viewportLocked, displaySurface, captureX, captureY])
 
   const handleUserViewport = useCallback(() => setViewportLocked(false), [])
   const handleSnap = useCallback(() => setViewportLocked(true), [])

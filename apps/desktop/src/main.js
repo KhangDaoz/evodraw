@@ -81,6 +81,9 @@ function handleDeepLink(url) {
       server: parsed.searchParams.get('server') || store.get('serverUrl', process.env.DEFAULT_SERVER_URL || 'http://localhost:4000'),
       shareId: parsed.searchParams.get('shareId'),
       username: parsed.searchParams.get('username'),
+      displaySurface: parsed.searchParams.get('displaySurface') || 'monitor',
+      captureX: parseInt(parsed.searchParams.get('captureX') || '0', 10),
+      captureY: parseInt(parsed.searchParams.get('captureY') || '0', 10),
     };
 
     console.log('[Main] Deep link received:', params.room, params.shareId);

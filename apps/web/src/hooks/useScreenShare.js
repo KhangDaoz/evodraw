@@ -46,6 +46,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
 
   const localStreamRef = useRef(null)
   const shareIdRef = useRef(null)
+  const launchTimerRef = useRef(null)
   const displaySurfaceRef = useRef(null)
   const videoElementsRef = useRef(new Map()) // shareId -> HTMLVideoElement
   const proxyRectsRef = useRef(new Map()) // shareId -> fabric.Rect
@@ -327,9 +328,15 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       })
     }
 
+    const handleOverlayReady = ({ shareId: readyShareId }) => {
+      if (readyShareId !== shareIdRef.current) return
+      clearTimeout(launchTimerRef.current)
+    }
+
     socket.on('screen:started', handleStarted)
     socket.on('screen:stopped', handleStopped)
     socket.on('screen:active_list', handleActiveList)
+    socket.on('overlay:ready', handleOverlayReady)
 
     // Request active shares on mount (late joiner)
     socket.emit('screen:get_active', { roomId })
@@ -338,6 +345,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       socket.off('screen:started', handleStarted)
       socket.off('screen:stopped', handleStopped)
       socket.off('screen:active_list', handleActiveList)
+      socket.off('overlay:ready', handleOverlayReady)
     }
   }, [isConnected, roomId, removeShareObject])
 
@@ -447,11 +455,15 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     document.body.appendChild(iframe)
     setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe) }, 1500)
     setOverlayReadyUrl(null)
-    setShowInstallHint(true)
+    setShowInstallHint(false)
+    launchTimerRef.current = setTimeout(() => setShowInstallHint(true), 10000)
   }, [overlayReadyUrl])
 
   const dismissOverlay = useCallback(() => setOverlayReadyUrl(null), [])
-  const dismissInstallHint = useCallback(() => setShowInstallHint(false), [])
+  const dismissInstallHint = useCallback(() => {
+    clearTimeout(launchTimerRef.current)
+    setShowInstallHint(false)
+  }, [])
 
   return {
     isSharing,

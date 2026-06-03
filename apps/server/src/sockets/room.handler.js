@@ -107,6 +107,11 @@ export const registerRoomHandlers = (io, socket) => {
         broadcastRoomUsers(io, roomId);
     });
 
+    socket.on('overlay:ready', ({ roomId, shareId }) => {
+        if (!roomId || !shareId) return;
+        socket.to(roomId).emit('overlay:ready', { shareId });
+    });
+
     socket.on('disconnect', () => {
         const { roomId, username } = socket.data;
         if (roomId) {

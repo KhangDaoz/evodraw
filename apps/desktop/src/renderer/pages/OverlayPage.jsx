@@ -55,6 +55,13 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
     return () => socket.off('screen:stopped', onStopped)
   }, [isOverlayMode, isConnected, shareId, onLeave])
 
+  // Notify web clients that the overlay has joined the room
+  useEffect(() => {
+    if (!isConnected || !isOverlayMode || !shareId) return
+    const socket = getSocket()
+    if (socket) socket.emit('overlay:ready', { roomId, shareId })
+  }, [isConnected, isOverlayMode, roomId, shareId])
+
   // On mount: sync Electron window state with initial React mode
   useEffect(() => {
     const initialMode = isOverlayMode ? 'drawing' : 'working'

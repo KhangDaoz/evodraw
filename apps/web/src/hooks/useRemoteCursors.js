@@ -13,7 +13,13 @@ function getCursorColor(name) {
 }
 
 const CURSOR_STALE_MS = 3000
-const CURSOR_THROTTLE_MS = 50
+const CURSOR_THROTTLE_MS = 80
+// Lerp factor applied per animation frame toward the latest network position.
+const CURSOR_SMOOTHING = 0.25
+// Stop interpolating once within this many scene units of the target.
+const CURSOR_SNAP_EPSILON = 0.5
+// Skip emitting if the cursor barely moved (scene units) since the last send.
+const CURSOR_EMIT_MIN_DELTA = 1
 
 /**
  * Manages remote cursor display and local cursor emission.
@@ -29,26 +35,68 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
   const [remoteCursors, setRemoteCursors] = useState({})
   const [viewportVersion, setViewportVersion] = useState(0)
   const lastEmitRef = useRef(0)
+  const lastEmitPosRef = useRef(null)
   const staleTimersRef = useRef({})
+  // Latest network positions (interpolation targets) and currently displayed
+  // (interpolated) positions, both in scene space, keyed by username.
+  const targetsRef = useRef({})
+  const displayRef = useRef({})
+  const rafRef = useRef(null)
 
   // Listen for remote cursor updates
   useEffect(() => {
     const socket = getSocket()
     if (!socket || !roomId || !isConnected) return
 
+    // Animation loop: ease each displayed cursor toward its network target so
+    // motion stays smooth at render rate even though positions arrive ~12/sec.
+    const tick = () => {
+      const targets = targetsRef.current
+      const display = displayRef.current
+      let moving = false
+
+      for (const user of Object.keys(targets)) {
+        const target = targets[user]
+        const cur = display[user] || { x: target.x, y: target.y }
+        const dx = target.x - cur.x
+        const dy = target.y - cur.y
+        if (Math.abs(dx) < CURSOR_SNAP_EPSILON && Math.abs(dy) < CURSOR_SNAP_EPSILON) {
+          display[user] = { x: target.x, y: target.y }
+        } else {
+          display[user] = { x: cur.x + dx * CURSOR_SMOOTHING, y: cur.y + dy * CURSOR_SMOOTHING }
+          moving = true
+        }
+      }
+
+      setRemoteCursors(Object.fromEntries(
+        Object.entries(display).map(([user, pos]) => [user, { x: pos.x, y: pos.y }])
+      ))
+
+      // Idle when everything has settled; the next network update restarts us.
+      rafRef.current = moving ? requestAnimationFrame(tick) : null
+    }
+
+    const ensureRunning = () => {
+      if (rafRef.current == null) rafRef.current = requestAnimationFrame(tick)
+    }
+
     const handleCursorMoved = ({ position, username: remoteUser }) => {
       if (!remoteUser || remoteUser === username) return
 
-      setRemoteCursors(prev => ({
-        ...prev,
-        [remoteUser]: { x: position.x, y: position.y },
-      }))
+      targetsRef.current[remoteUser] = { x: position.x, y: position.y }
+      // First sighting: snap display to target so it doesn't fly in from origin.
+      if (!displayRef.current[remoteUser]) {
+        displayRef.current[remoteUser] = { x: position.x, y: position.y }
+      }
+      ensureRunning()
 
       // Reset stale timer for this user
       if (staleTimersRef.current[remoteUser]) {
         clearTimeout(staleTimersRef.current[remoteUser])
       }
       staleTimersRef.current[remoteUser] = setTimeout(() => {
+        delete targetsRef.current[remoteUser]
+        delete displayRef.current[remoteUser]
         setRemoteCursors(prev => {
           const next = { ...prev }
           delete next[remoteUser]
@@ -64,6 +112,10 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
       socket.off('cursor_moved', handleCursorMoved)
       Object.values(staleTimersRef.current).forEach(clearTimeout)
       staleTimersRef.current = {}
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
     }
   }, [roomId, isConnected, username])
 
@@ -77,11 +129,18 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
       const now = Date.now()
       const pt = fabricCanvas.getScenePoint(opt.e)
 
+      // Skip near-duplicate positions so an idle/jittery mouse doesn't emit.
+      const last = lastEmitPosRef.current
+      if (last && Math.abs(pt.x - last.x) < CURSOR_EMIT_MIN_DELTA && Math.abs(pt.y - last.y) < CURSOR_EMIT_MIN_DELTA) {
+        return
+      }
+
       const emitMove = () => {
         const socket = getSocket()
         if (socket) {
           socket.emit('cursor_move', { roomId, position: { x: pt.x, y: pt.y }, username })
           lastEmitRef.current = Date.now()
+          lastEmitPosRef.current = { x: pt.x, y: pt.y }
         }
       }
 

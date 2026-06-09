@@ -1,6 +1,7 @@
 import { registerRoomHandlers } from './room.handler.js';
 import { registerDrawHandlers } from './draw.handler.js';
 import { registerChatHandlers } from './chat.handler.js';
+import { registerLiveKitHandlers } from './livekit.handler.js';
 import { registerScreenShareHandlers } from './screen.handler.js';
 import { verifyToken } from '../services/token.service.js';
 
@@ -32,6 +33,7 @@ export const initializeSockets = (io) => {
         registerRoomHandlers(io, socket);
         registerDrawHandlers(io, socket);
         registerChatHandlers(io, socket);
+        registerLiveKitHandlers(io, socket);
         registerScreenShareHandlers(io, socket);
 
         socket.on('disconnect', () => {

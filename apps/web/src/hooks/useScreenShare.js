@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { RoomEvent, Track } from 'livekit-client'
 import { getSocket } from '../services/socket'
+
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000'
 import {
   createScreenShareOverlay,
   removeScreenShareOverlay,
@@ -36,10 +38,16 @@ import {
  */
 export default function useScreenShare(roomId, username, isConnected, fabricCanvas, room, screenShareLayer) {
   const [isSharing, setIsSharing] = useState(false)
-  const [activeShares, setActiveShares] = useState(new Map()) // shareId -> { username }
+  const [activeShares, setActiveShares] = useState(new Map()) // shareId -> { username, displaySurface?, ... }
+  const [overlayReadyUrl, setOverlayReadyUrl] = useState(null)
+  const [showInstallHint, setShowInstallHint] = useState(false)
+  const [sharingShareId, setSharingShareId] = useState(null)
+  const [sharingDisplaySurface, setSharingDisplaySurface] = useState(null)
 
   const localStreamRef = useRef(null)
   const shareIdRef = useRef(null)
+  const launchTimerRef = useRef(null)
+  const displaySurfaceRef = useRef(null)
   const videoElementsRef = useRef(new Map()) // shareId -> HTMLVideoElement
   const proxyRectsRef = useRef(new Map()) // shareId -> fabric.Rect
 
@@ -151,8 +159,8 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       console.warn('[ScreenShare] fabricCanvas or screenShareLayer is null — cannot start sharing')
       return
     }
-    if (!room) {
-      console.warn('[ScreenShare] No LiveKit room available')
+    if (!room || room.state !== 'connected') {
+      console.warn('[ScreenShare] LiveKit room not connected (state:', room?.state, ') — cannot share screen')
       return
     }
     console.log('[ScreenShare] Starting screen share...')
@@ -173,11 +181,15 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       }
 
       const audioTrack = stream.getAudioTracks()[0]
+      const displaySurface = videoTrack.getSettings().displaySurface
+      displaySurfaceRef.current = displaySurface
 
       localStreamRef.current = stream
       const shareId = generateShareId()
       shareIdRef.current = shareId
       setIsSharing(true)
+      setSharingShareId(shareId)
+      setSharingDisplaySurface(displaySurface)
 
       // Publish video track to LiveKit (with shareId as track name for remote identification)
       try {
@@ -194,6 +206,27 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
           })
           console.log('[ScreenShare] Audio track published to LiveKit')
         }
+
+        // Precompute the deep link URL so the "Open in EvoDraw" banner button
+        // can fire it as a clean, synchronous user gesture with no awaits.
+        const token = localStorage.getItem('token')
+        let captureX = 0
+        let captureY = 0
+        if (displaySurface === 'browser') {
+          // Estimate where the tab's viewport starts on the physical screen.
+          // outerHeight - innerHeight captures the browser chrome (tabs + address bar).
+          captureX = Math.round(window.screenX + (window.outerWidth - window.innerWidth) / 2)
+          captureY = Math.round(window.screenY + (window.outerHeight - window.innerHeight))
+        }
+        setOverlayReadyUrl(
+          `evodraw://start?room=${encodeURIComponent(roomId)}` +
+          `&token=${encodeURIComponent(token || '')}` +
+          `&server=${encodeURIComponent(SERVER_URL)}` +
+          `&shareId=${encodeURIComponent(shareId)}` +
+          `&username=${encodeURIComponent(usernameRef.current)}` +
+          `&displaySurface=${encodeURIComponent(displaySurface || '')}` +
+          `&captureX=${captureX}&captureY=${captureY}`
+        )
       } catch (err) {
         console.error('[ScreenShare] Failed to publish track to LiveKit', err)
       }
@@ -201,7 +234,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       // Notify room via socket signaling (for metadata tracking)
       const socket = getSocket()
       if (socket) {
-        socket.emit('screen:start', { roomId, shareId })
+        socket.emit('screen:start', { roomId, shareId, displaySurface })
       }
 
       // Create local preview as a DOM overlay
@@ -263,7 +296,11 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     }
 
     shareIdRef.current = null
+    displaySurfaceRef.current = null
     setIsSharing(false)
+    setOverlayReadyUrl(null)
+    setSharingShareId(null)
+    setSharingDisplaySurface(null)
   }, [room, roomId, removeShareObject])
 
   // Handle Socket.io signaling events (metadata tracking)
@@ -272,10 +309,10 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     if (!socket || !isConnected) return
 
     // Someone started sharing (socket-based notification)
-    const handleStarted = ({ socketId, shareId, username: sharerName }) => {
+    const handleStarted = ({ socketId, shareId, username: sharerName, displaySurface }) => {
       setActiveShares(prev => {
         const next = new Map(prev)
-        next.set(shareId, { socketId, username: sharerName })
+        next.set(shareId, { ...prev.get(shareId), socketId, username: sharerName, displaySurface })
         return next
       })
     }
@@ -292,16 +329,24 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
 
     // Late joiner: get list of active shares
     const handleActiveList = ({ shares }) => {
-      const map = new Map()
-      for (const s of shares) {
-        map.set(s.shareId, { socketId: s.socketId, username: s.username })
-      }
-      setActiveShares(map)
+      setActiveShares(prev => {
+        const next = new Map()
+        for (const s of shares) {
+          next.set(s.shareId, { ...prev.get(s.shareId), socketId: s.socketId, username: s.username, displaySurface: s.displaySurface })
+        }
+        return next
+      })
+    }
+
+    const handleOverlayReady = ({ shareId: readyShareId }) => {
+      if (readyShareId !== shareIdRef.current) return
+      clearTimeout(launchTimerRef.current)
     }
 
     socket.on('screen:started', handleStarted)
     socket.on('screen:stopped', handleStopped)
     socket.on('screen:active_list', handleActiveList)
+    socket.on('overlay:ready', handleOverlayReady)
 
     // Request active shares on mount (late joiner)
     socket.emit('screen:get_active', { roomId })
@@ -310,6 +355,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       socket.off('screen:started', handleStarted)
       socket.off('screen:stopped', handleStopped)
       socket.off('screen:active_list', handleActiveList)
+      socket.off('overlay:ready', handleOverlayReady)
     }
   }, [isConnected, roomId, removeShareObject])
 
@@ -353,10 +399,10 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
         setupOverlay(videoEl, shareId, sharerName)
       }
 
-      // Update active shares
+      // Update active shares (merge to preserve fields set by socket events, e.g. displaySurface)
       setActiveShares(prev => {
         const next = new Map(prev)
-        next.set(shareId, { username: sharerName })
+        next.set(shareId, { ...prev.get(shareId), username: sharerName })
         return next
       })
     }
@@ -411,12 +457,37 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const launchOverlay = useCallback(() => {
+    if (!overlayReadyUrl) return
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;opacity:0'
+    iframe.src = overlayReadyUrl
+    document.body.appendChild(iframe)
+    setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe) }, 1500)
+    setOverlayReadyUrl(null)
+    setShowInstallHint(false)
+    launchTimerRef.current = setTimeout(() => setShowInstallHint(true), 10000)
+  }, [overlayReadyUrl])
+
+  const dismissOverlay = useCallback(() => setOverlayReadyUrl(null), [])
+  const dismissInstallHint = useCallback(() => {
+    clearTimeout(launchTimerRef.current)
+    setShowInstallHint(false)
+  }, [])
+
   return {
     isSharing,
     activeShares,
+    sharingShareId,
+    sharingDisplaySurface,
     startSharing,
     stopSharing,
     changeResolution,
     changeFrameRate,
+    overlayReadyUrl,
+    launchOverlay,
+    dismissOverlay,
+    showInstallHint,
+    dismissInstallHint,
   }
 }

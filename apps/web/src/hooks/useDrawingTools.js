@@ -126,13 +126,14 @@ export default function useDrawingTools(
     // Images (_evoImage), Text ('i-text'), and screen shares (_evoScreenShare) are immune to eraser.
     // Images and Text can only be deleted via keyboard Delete/Backspace while selected.
     const eraseAt = (o) => {
-      if (o.target) {
-        if (o.target._evoScreenShare) return // screen shares are not erasable
-        if (o.target._evoImage) return        // images are not erasable by eraser
-        if (o.target.type === 'i-text') return // text is not erasable by eraser
-        fabricCanvas.remove(o.target)
-        fabricCanvas.requestRenderAll()
-      }
+      if (!o.target) return
+      const target = o.target
+      if (target._evoScreenShare) return
+      if (target._evoImage) return
+      if (target.type === 'i-text') return
+
+      fabricCanvas.remove(target)
+      fabricCanvas.requestRenderAll()
     }
 
     // Snap angle to nearest 45° increment

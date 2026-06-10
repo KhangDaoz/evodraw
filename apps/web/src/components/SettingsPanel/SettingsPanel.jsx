@@ -133,10 +133,12 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
             <input
               className="settings-input"
               type="text"
-              value={localUsername}
-              onChange={(e) => setLocalUsername(e.target.value)}
+              value={onUsernameChange ? localUsername : (username || '')}
+              onChange={onUsernameChange ? (e) => setLocalUsername(e.target.value) : undefined}
+              readOnly={!onUsernameChange}
               placeholder="Username"
               maxLength={24}
+              title={onUsernameChange ? undefined : 'Display name is set at join time'}
             />
           </div>
 

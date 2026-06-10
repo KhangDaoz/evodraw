@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(git checkout *)"
+    ]
+  },
+  "enabledPlugins": {
+    "engineering-skills@claude-code-skills": true
+  }
+}

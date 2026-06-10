@@ -1,0 +1,19 @@
+/* === Overlay Canvas Container === */
+
+.evodraw-canvas-area {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.draw-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  touch-action: none;
+  background: transparent;
+}

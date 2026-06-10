@@ -3,13 +3,108 @@ import Room from '../models/Room.js';
 import bcrypt from 'bcrypt';
 import { ensureAuthorizedRoom } from '../utils/guard.js';
 
+async function joinRoom(io, socket, payload) {
+    const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : '';
+    const username = typeof payload?.username === 'string' ? payload.username.trim() : '';
+    const passcode = typeof payload?.passcode === 'string' ? payload.passcode.trim() : '';
+
+    if (!roomId || roomId.length !== 6 || !passcode || !/^\d{4}$/.test(passcode)) {
+        socket.emit('room_error', { message: 'Invalid room code or passcode format.' });
+        return;
+    }
+
+    try {
+        const room = await Room.findOne({ code: roomId.toUpperCase() });
+        if (!room || !await bcrypt.compare(passcode, room.passcode)) {
+            socket.emit('room_error', { message: 'Invalid room code or passcode.' });
+            return;
+        }
+    } catch (error) {
+        console.error('Socket join_room error:', error);
+        socket.emit('room_error', { message: 'Failed to verify room access.' });
+        return;
+    }
+
+    socket.join(roomId);
+    socket.data.roomId = roomId;
+    socket.data.username = username;
+
+    console.log(`User ${username} joined room ${roomId}`);
+    markRoomActivity(roomId, { force: true });
+
+    socket.to(roomId).emit('user_joined', { username, roomId, socketId: socket.id });
+    broadcastRoomUsers(io, roomId);
+}
+
+function leaveRoom(io, socket, { roomId, username }) {
+    try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
+    socket.leave(roomId);
+    socket.data.roomId = null;
+
+    console.log(`User ${username} left room ${roomId}`);
+    markRoomActivity(roomId, { force: true });
+
+    socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
+    broadcastRoomUsers(io, roomId);
+}
+
+function updateUsername(io, socket, { roomId, newUsername }) {
+    if (!roomId || !newUsername) return;
+    try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
+
+    const oldUsername = socket.data.username;
+    socket.data.username = newUsername;
+
+    console.log(`User ${oldUsername} changed name to ${newUsername} in room ${roomId}`);
+
+    socket.to(roomId).emit('user_name_changed', { socketId: socket.id, oldUsername, newUsername });
+
+    broadcastRoomUsers(io, roomId);
+}
+
+
+function joinRoomOverlay(io, socket, { roomId, username }) {
+    const authRoomId = socket.data?.auth?.roomId?.toString();
+    if (!authRoomId || authRoomId !== (roomId || '').toString()) {
+        socket.emit('room_error', { message: 'Token does not authorize this room.' });
+        return;
+    }
+
+    socket.join(roomId);
+    socket.data.roomId = roomId;
+    socket.data.username = username || 'Presenter';
+    socket.data.isOverlay = true;
+
+    console.log(`[Overlay] ${socket.data.username} joined room ${roomId} via overlay`);
+    markRoomActivity(roomId, { force: true });
+
+    socket.emit('room_joined', { roomId });
+    socket.to(roomId).emit('user_joined', { username: socket.data.username, roomId, socketId: socket.id });
+    broadcastRoomUsers(io, roomId);
+}
+
+function onOverlayReady(socket, { roomId, shareId }) {
+    if (!roomId || !shareId) return;
+    socket.to(roomId).emit('overlay:ready', { shareId });
+}
+
+function onDisconnect(io, socket) {
+    const { roomId, username } = socket.data;
+    if (roomId) {
+        socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
+        broadcastRoomUsers(io, roomId);
+    }
+}
+
 async function getRoomUsers(io, roomId) {
     try {
         const sockets = await io.in(roomId).fetchSockets();
-        return sockets.map(s => ({
-            socketId: s.id,
-            username: s.data.username
-        }));
+        return sockets
+            .filter(s => !s.data.isOverlay)
+            .map(s => ({
+                socketId: s.id,
+                username: s.data.username
+            }));
     } catch (err) {
         console.error('Error fetching sockets:', err);
         return [];
@@ -22,73 +117,10 @@ async function broadcastRoomUsers(io, roomId) {
 }
 
 export const registerRoomHandlers = (io, socket) => {
-    socket.on('join_room', async (payload) => {
-
-        const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : '';
-        const username = typeof payload?.username === 'string' ? payload.username.trim() : '';
-        const passcode = typeof payload?.passcode === 'string' ? payload.passcode.trim() : '';
-
-        if (!roomId || roomId.length !== 6 || !passcode || !/^\d{4}$/.test(passcode)) {
-            socket.emit('room_error', { message: 'Invalid room code or passcode format.' });
-            return;
-        }
-
-        try {
-            const room = await Room.findOne({ code: roomId.toUpperCase() });
-            if (!room || !await bcrypt.compare(passcode, room.passcode)) {
-                socket.emit('room_error', { message: 'Invalid room code or passcode.' });
-                return;
-            }
-        } catch (error) {
-            console.error('Socket join_room error:', error);
-            socket.emit('room_error', { message: 'Failed to verify room access.' });
-            return;
-        }
-
-        socket.join(roomId);
-        socket.data.roomId = roomId;
-        socket.data.username = username;
-
-        console.log(`User ${username} joined room ${roomId}`);
-        markRoomActivity(roomId, { force: true });
-
-        socket.to(roomId).emit('user_joined', { username, roomId, socketId: socket.id });
-        broadcastRoomUsers(io, roomId);
-    });
-
-    socket.on('update_username', ({ roomId, newUsername }) => {
-        if (!roomId || !newUsername) return;
-        try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
-
-        const oldUsername = socket.data.username;
-        socket.data.username = newUsername;
-
-        console.log(`User ${oldUsername} changed name to ${newUsername} in room ${roomId}`);
-
-        // Broadcast the new name to others
-        socket.to(roomId).emit('user_name_changed', { socketId: socket.id, oldUsername, newUsername });
-
-        // Broadcast updated user list
-        broadcastRoomUsers(io, roomId);
-    });
-
-    socket.on('leave_room', ({ roomId, username }) => {
-        try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
-        socket.leave(roomId);
-        socket.data.roomId = null;
-
-        console.log(`User ${username} left room ${roomId}`);
-        markRoomActivity(roomId, { force: true });
-
-        socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
-        broadcastRoomUsers(io, roomId);
-    });
-
-    socket.on('disconnect', () => {
-        const { roomId, username } = socket.data;
-        if (roomId) {
-            socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
-            broadcastRoomUsers(io, roomId);
-        }
-    });
+    socket.on('join_room',        (payload) => joinRoom(io, socket, payload));
+    socket.on('update_username',  (data)    => updateUsername(io, socket, data));
+    socket.on('leave_room',       (data)    => leaveRoom(io, socket, data));
+    socket.on('join_room_overlay',(data)    => joinRoomOverlay(io, socket, data));
+    socket.on('overlay:ready',    (data)    => onOverlayReady(socket, data));
+    socket.on('disconnect',       ()        => onDisconnect(io, socket));
 };

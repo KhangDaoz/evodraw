@@ -33,7 +33,7 @@ export default function Toolbar({
   screenAudio = false,
   onToggleScreenAudio,
   screenFps = 30,
-  onChangeFps
+  onChangeFps,
 }) {
   const [showOptions, setShowOptions] = useState(false)
   const [showShapeOptions, setShowShapeOptions] = useState(false)

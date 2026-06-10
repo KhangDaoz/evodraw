@@ -6,6 +6,7 @@ import useLiveKitRoom from '../../hooks/useLiveKitRoom'
 import useVoiceChat from '../../hooks/useVoiceChat'
 import useScreenShare from '../../hooks/useScreenShare'
 import useScreenShareControls from '../../hooks/useScreenShareControls'
+import useDocumentManager from '../../hooks/useDocumentManager'
 import { getSocket } from '../../services/socket'
 import Toolbar from '../../components/Toolbar/Toolbar'
 import BottomBar from '../../components/BottomBar/BottomBar'
@@ -35,6 +36,7 @@ export default function RoomPage() {
   const unreadTimerRef = useRef(null)
   const prevMessagesLengthRef = useRef(0)
   const canvasRef = useRef(null)
+  const syncStateRef = useRef({ _applying: false })
   const chatPanelRef = useRef(null)
   const chatToggleBtnRef = useRef(null)
 
@@ -105,6 +107,9 @@ export default function RoomPage() {
     handleToggle: handleScreenShareToggle,
     handleResolutionChange, handleFpsChange, handleToggleAudio,
   } = useScreenShareControls(screenShareHook)
+
+  // Document management: export/import board
+  const { handleExport, handleImport } = useDocumentManager(fabricCanvas, syncStateRef, roomCode)
 
   // Keep fabricCanvas and screenShareLayer in sync when canvas ref mounts
   useEffect(() => {
@@ -215,6 +220,7 @@ export default function RoomPage() {
     <div className="room-page">
       <Canvas
         ref={canvasRef}
+        syncState={syncStateRef}
         activeTool={activeTool}
         onToolSelect={setActiveTool}
         strokeColor={strokeColor}
@@ -290,6 +296,8 @@ export default function RoomPage() {
         username={username}
         canvasBgId={canvasBgId}
         onBgChange={handleBgChange}
+        onExport={handleExport}
+        onImport={handleImport}
       />
 
       {error && (

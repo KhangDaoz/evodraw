@@ -29,7 +29,7 @@ function applyTheme(themeId) {
   localStorage.setItem('evodraw_theme', themeId)
 }
 
-export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, username, onUsernameChange, canvasBgId, onBgChange }) {
+export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, username, onUsernameChange, canvasBgId, onBgChange, onExport, onImport }) {
   const [isOpen, setIsOpen] = useState(false)
   const [localUsername, setLocalUsername] = useState(username || 'Username')
   const [theme, setTheme] = useState(() => localStorage.getItem('evodraw_theme') || 'light')
@@ -222,6 +222,40 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
                       </svg>
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* Export / Import Board */}
+              <div className="settings-section">
+                <label className="settings-label">Board Data</label>
+                <div className="board-data-actions">
+                  <button className="board-data-btn" onClick={onExport} title="Export board as JSON">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    <span>Export</span>
+                  </button>
+                  <label className="board-data-btn import-label" title="Import board from JSON" tabIndex={0}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    <span>Import</span>
+                    <input
+                      type="file"
+                      accept=".json"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        if (e.target.files[0] && onImport) {
+                          onImport(e.target.files[0])
+                          e.target.value = ''
+                        }
+                      }}
+                    />
+                  </label>
                 </div>
               </div>
 

@@ -8,9 +8,10 @@ import useImagePasting from '../../hooks/useImagePasting'
 import { useRef, useImperativeHandle, forwardRef } from 'react'
 import './Canvas.css'
 
-const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle, roomId, username, isConnected, canvasBgColor, canvasBgId, onBgColorChange }, ref) => {
+const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle, roomId, username, isConnected, canvasBgColor, canvasBgId, onBgColorChange, syncState: externalSyncState }, ref) => {
   const { fabricCanvas, containerRef, canvasRef } = useInfiniteCanvas(activeTool)
-  const syncState = useRef({ _applying: false })
+  const internalSyncState = useRef({ _applying: false })
+  const syncState = externalSyncState || internalSyncState
   const screenShareLayerRef = useRef(null)
 
   // Real-time sync: serialize canvas ops ↔ socket

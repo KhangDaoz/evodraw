@@ -66,26 +66,3 @@ export async function uploadFile(roomId, file) {
 
   return res.json()
 }
-
-/**
- * Get all files for a room.
- * Returns { success: true, data: [{ fileId, url, originalName, mimetype, size, createdAt }] }
- */
-export async function getFilesByRoom(roomId) {
-  const token = localStorage.getItem('token')
-  const headers = {}
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const res = await fetch(`${BASE_URL}/rooms/${roomId}/files`, {
-    headers
-  })
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.error || 'Failed to fetch files')
-  }
-
-  return res.json()
-}

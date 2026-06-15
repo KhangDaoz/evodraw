@@ -16,6 +16,12 @@ import { RoomEvent, Track } from 'livekit-client'
 export default function useVoiceChat(room) {
   const [isVoiceActive, setIsVoiceActive] = useState(false)
   const [streams, setStreams] = useState({}) // { participantIdentity: MediaStream }
+  const [participantVolumes, setParticipantVolumes] = useState({}) // { participantIdentity: 0..1 }
+
+  // Set a remote participant's microphone playback volume (0..1).
+  const setParticipantVolume = useCallback((identity, volume) => {
+    setParticipantVolumes(prev => ({ ...prev, [identity]: volume }))
+  }, [])
 
   // Toggle local microphone on/off
   const toggleVoice = useCallback(async () => {
@@ -46,11 +52,12 @@ export default function useVoiceChat(room) {
 
       console.log(`[VoiceChat] Audio track subscribed from ${participant.name}`)
 
-      // Wrap the underlying MediaStreamTrack in a MediaStream for RoomPage compatibility
+      // Wrap the underlying MediaStreamTrack in a MediaStream for RoomPage compatibility.
+      // Keyed by identity (one microphone per participant) so per-user volume maps cleanly.
       const mediaStream = new MediaStream([track.mediaStreamTrack])
       setStreams(prev => ({
         ...prev,
-        [`${participant.identity}_${track.sid}`]: mediaStream,
+        [participant.identity]: mediaStream,
       }))
     }
 
@@ -63,7 +70,7 @@ export default function useVoiceChat(room) {
 
       setStreams(prev => {
         const next = { ...prev }
-        delete next[`${participant.identity}_${track.sid}`]
+        delete next[participant.identity]
         return next
       })
     }
@@ -90,5 +97,7 @@ export default function useVoiceChat(room) {
     isVoiceActive,
     toggleVoice,
     streams,
+    participantVolumes,
+    setParticipantVolume,
   }
 }

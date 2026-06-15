@@ -11,7 +11,7 @@ export default function useScreenShareControls(screenShareHook) {
   const { isSharing, startSharing, stopSharing, changeResolution, changeFrameRate } = screenShareHook
 
   const [screenResolution, setScreenResolution] = useState('1080p')
-  const [screenAudio, setScreenAudio] = useState(false)
+  const [screenAudio, setScreenAudio] = useState(true)
   const [screenFps, setScreenFps] = useState(30)
 
   const handleToggle = useCallback(() => {

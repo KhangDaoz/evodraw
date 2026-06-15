@@ -16,6 +16,7 @@ import MembersPanel from '../../components/MembersPanel/MembersPanel'
 import ChatPanel from '../../components/ChatPanel/ChatPanel'
 import OpenInAppBanner from '../../components/OpenInAppBanner/OpenInAppBanner'
 import DesktopInstallHint from '../../components/OpenInAppBanner/DesktopInstallHint'
+import VolumePopup from '../../components/VolumePopup/VolumePopup'
 import { generateAnonymousName } from '../../utils/nameGenerator'
 import './RoomPage.css'
 
@@ -33,6 +34,7 @@ export default function RoomPage() {
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [toastMessage, setToastMessage] = useState(null)
+  const [shareMenu, setShareMenu] = useState(null) // { shareId, name, x, y } — screen-share volume menu
   const unreadTimerRef = useRef(null)
   const prevMessagesLengthRef = useRef(0)
   const canvasRef = useRef(null)
@@ -91,7 +93,7 @@ export default function RoomPage() {
 
   // LiveKit Room — shared media transport for voice chat and screen share
   const { room } = useLiveKitRoom(roomCode, username)
-  const { isVoiceActive, toggleVoice, streams } = useVoiceChat(room)
+  const { isVoiceActive, toggleVoice, streams, participantVolumes, setParticipantVolume } = useVoiceChat(room)
 
   // Screen share — needs fabricCanvas and screenShareLayer from canvas ref
   const [fabricCanvas, setFabricCanvas] = useState(null)
@@ -99,7 +101,7 @@ export default function RoomPage() {
   const screenShareHook = useScreenShare(
     roomCode, username, isConnected, fabricCanvas, room, screenShareLayer
   )
-  const { isSharing, activeShares, overlayReadyUrl, launchOverlay, dismissOverlay, showInstallHint, dismissInstallHint } = screenShareHook
+  const { isSharing, activeShares, overlayReadyUrl, launchOverlay, dismissOverlay, showInstallHint, dismissInstallHint, shareVolumes, setShareVolume } = screenShareHook
 
   // Screen share UI controls (resolution, fps, audio)
   const {
@@ -129,6 +131,44 @@ export default function RoomPage() {
     }, 100)
     return () => clearTimeout(timer)
   }, [fabricCanvas, screenShareLayer])
+
+  // Right-click a screen-share rect → open its audio volume menu
+  useEffect(() => {
+    if (!fabricCanvas) return
+    const el = fabricCanvas.upperCanvasEl
+    if (!el) return
+
+    const handleContextMenu = (e) => {
+      // Manual hit-test: fabricCanvas.findTarget() returns nothing while a drawing
+      // tool (pen/eraser) is active, so we test the pointer against each share rect's
+      // scene-space bounding box directly (origin-independent via aCoords).
+      const p = fabricCanvas.getScenePoint(e)
+      const shares = fabricCanvas.getObjects().filter(o => o._evoScreenShare)
+      for (let i = shares.length - 1; i >= 0; i--) {
+        const o = shares[i]
+        o.setCoords()
+        const c = o.aCoords
+        if (!c) continue
+        const minX = Math.min(c.tl.x, c.br.x)
+        const maxX = Math.max(c.tl.x, c.br.x)
+        const minY = Math.min(c.tl.y, c.br.y)
+        const maxY = Math.max(c.tl.y, c.br.y)
+        if (p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY) {
+          e.preventDefault()
+          setShareMenu({
+            shareId: o._evoShareId,
+            name: o._evoShareUser || 'Screen share',
+            x: e.clientX,
+            y: e.clientY,
+          })
+          return
+        }
+      }
+    }
+
+    el.addEventListener('contextmenu', handleContextMenu)
+    return () => el.removeEventListener('contextmenu', handleContextMenu)
+  }, [fabricCanvas])
 
   // Canvas Background Color sync — listen for remote changes
   useEffect(() => {
@@ -286,6 +326,8 @@ export default function RoomPage() {
           currentUser={username}
           connectedUsers={connectedUsers}
           isConnected={isConnected}
+          participantVolumes={participantVolumes}
+          onSetUserVolume={setParticipantVolume}
         />
       </div>
 
@@ -345,18 +387,28 @@ export default function RoomPage() {
       )}
 
       <div style={{ display: 'none' }}>
-        {Object.entries(streams).map(([socketId, stream]) => (
+        {Object.entries(streams).map(([identity, stream]) => (
           <audio
-            key={socketId}
+            key={identity}
             autoPlay
             ref={audio => {
-              if (audio && audio.srcObject !== stream) {
-                audio.srcObject = stream
-              }
+              if (!audio) return
+              if (audio.srcObject !== stream) audio.srcObject = stream
+              audio.volume = participantVolumes[identity] ?? 1
             }}
           />
         ))}
       </div>
+
+      {shareMenu && (
+        <VolumePopup
+          label={`${shareMenu.name} — screen audio`}
+          volume={shareVolumes[shareMenu.shareId] ?? 1}
+          onChange={(v) => setShareVolume(shareMenu.shareId, v)}
+          onClose={() => setShareMenu(null)}
+          position={{ x: shareMenu.x, y: shareMenu.y }}
+        />
+      )}
 
       <BottomBar />
     </div>

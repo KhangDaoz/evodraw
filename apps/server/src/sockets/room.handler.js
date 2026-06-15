@@ -3,10 +3,32 @@ import Room from '../models/Room.js';
 import bcrypt from 'bcrypt';
 import { ensureAuthorizedRoom } from '../utils/guard.js';
 
+// In-memory brute-force guard for socket joins, keyed on client IP.
+// Mirrors the REST joinRateLimiter; resets on restart (acceptable, like other in-memory state).
+const JOIN_WINDOW_MS = 5 * 60 * 1000;
+const JOIN_MAX_ATTEMPTS = 20;
+const joinAttempts = new Map(); // ip -> { count, resetAt }
+
+function isJoinBlocked(ip) {
+    const now = Date.now();
+    const entry = joinAttempts.get(ip);
+    if (!entry || now > entry.resetAt) {
+        joinAttempts.set(ip, { count: 1, resetAt: now + JOIN_WINDOW_MS });
+        return false;
+    }
+    entry.count += 1;
+    return entry.count > JOIN_MAX_ATTEMPTS;
+}
+
 async function joinRoom(io, socket, payload) {
     const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : '';
     const username = typeof payload?.username === 'string' ? payload.username.trim() : '';
     const passcode = typeof payload?.passcode === 'string' ? payload.passcode.trim() : '';
+
+    if (isJoinBlocked(socket.handshake.address)) {
+        socket.emit('room_error', { message: 'Too many join attempts. Please try again later.' });
+        return;
+    }
 
     if (!roomId || roomId.length !== 6 || !passcode || !/^\d{4}$/.test(passcode)) {
         socket.emit('room_error', { message: 'Invalid room code or passcode format.' });

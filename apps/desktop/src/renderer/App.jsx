@@ -36,7 +36,7 @@ export default function App() {
   }, []);
 
   const handleDeepLinkParams = (params) => {
-    console.log('[App] handleDeepLinkParams', params);
+    console.log('[App] handleDeepLinkParams', { room: params.room, shareId: params.shareId });
     if (params.server) applyServerUrl(params.server);
     localStorage.setItem('token', params.token);
     setRoomInfo({

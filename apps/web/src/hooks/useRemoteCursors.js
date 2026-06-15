@@ -14,8 +14,13 @@ function getCursorColor(name) {
 
 const CURSOR_STALE_MS = 3000
 const CURSOR_THROTTLE_MS = 80
-// Lerp factor applied per animation frame toward the latest network position.
-const CURSOR_SMOOTHING = 0.25
+// Time constant (ms) for frame-rate-INDEPENDENT cursor smoothing. Each frame eases
+// toward the target by `1 - exp(-dt / TAU)`, so convergence happens at the same
+// real-time rate on 30/60/120/144 Hz displays (a fixed per-frame lerp does not).
+// ~60ms approximates the previous 0.25/frame feel at 60fps.
+const CURSOR_SMOOTHING_TAU_MS = 60
+// Clamp the per-frame delta so a backgrounded tab (huge dt) snaps instead of lurching.
+const CURSOR_MAX_FRAME_MS = 100
 // Stop interpolating once within this many scene units of the target.
 const CURSOR_SNAP_EPSILON = 0.5
 // Skip emitting if the cursor barely moved (scene units) since the last send.
@@ -42,6 +47,8 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
   const targetsRef = useRef({})
   const displayRef = useRef({})
   const rafRef = useRef(null)
+  // Timestamp of the previous animation frame, for delta-time smoothing.
+  const lastFrameRef = useRef(null)
 
   // Listen for remote cursor updates
   useEffect(() => {
@@ -50,10 +57,16 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
 
     // Animation loop: ease each displayed cursor toward its network target so
     // motion stays smooth at render rate even though positions arrive ~12/sec.
-    const tick = () => {
+    const tick = (now) => {
       const targets = targetsRef.current
       const display = displayRef.current
       let moving = false
+
+      // Frame delta in ms (clamped). Convert to a frame-rate-independent ease factor.
+      const last = lastFrameRef.current
+      const frameMs = last == null ? 1000 / 60 : Math.min(now - last, CURSOR_MAX_FRAME_MS)
+      lastFrameRef.current = now
+      const factor = 1 - Math.exp(-frameMs / CURSOR_SMOOTHING_TAU_MS)
 
       for (const user of Object.keys(targets)) {
         const target = targets[user]
@@ -63,7 +76,7 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
         if (Math.abs(dx) < CURSOR_SNAP_EPSILON && Math.abs(dy) < CURSOR_SNAP_EPSILON) {
           display[user] = { x: target.x, y: target.y }
         } else {
-          display[user] = { x: cur.x + dx * CURSOR_SMOOTHING, y: cur.y + dy * CURSOR_SMOOTHING }
+          display[user] = { x: cur.x + dx * factor, y: cur.y + dy * factor }
           moving = true
         }
       }
@@ -77,7 +90,11 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
     }
 
     const ensureRunning = () => {
-      if (rafRef.current == null) rafRef.current = requestAnimationFrame(tick)
+      if (rafRef.current == null) {
+        // Reset the frame clock so the first frame after idle uses a normal delta.
+        lastFrameRef.current = null
+        rafRef.current = requestAnimationFrame(tick)
+      }
     }
 
     const handleCursorMoved = ({ position, username: remoteUser }) => {

@@ -1,6 +1,17 @@
 import { getBucket } from '../config/firebase.js';
 import { randomUUID } from 'crypto';
 
+// Canonical extension per allowed MIME type. The extension is derived from the
+// (multer-validated) mimetype rather than the client-supplied filename, which
+// avoids object-name injection via crafted originalnames (e.g. "x/../../y").
+const EXT_BY_MIME = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'application/pdf': 'pdf',
+};
+
 /**
  * Upload a file to Firebase Storage and return its public URL.
  * POST /api/rooms/:roomId/files
@@ -26,9 +37,13 @@ export async function uploadFile(req, res, next) {
             });
         }
 
-        // Generate unique file path in Firebase Storage
+        // Generate unique file path in Firebase Storage.
+        // Extension + content-type come from the validated mimetype, not the client filename.
         const fileId = randomUUID();
-        const ext = file.originalname.split('.').pop() || 'bin';
+        const ext = EXT_BY_MIME[file.mimetype];
+        if (!ext) {
+            return res.status(400).json({ success: false, error: 'Unsupported file type.' });
+        }
         const storagePath = `rooms/${roomId}/${fileId}.${ext}`;
 
         // Upload to Firebase Storage

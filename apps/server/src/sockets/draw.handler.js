@@ -2,6 +2,10 @@ import { markRoomActivity } from '../utils/roomActivity.js';
 import { getRoom, updateRoomService } from '../services/room.service.js';
 import { ensureAuthorizedRoom } from '../utils/guard.js';
 
+// Payload bounds to prevent memory/bandwidth DoS and runaway document growth.
+const MAX_SNAPSHOT_ELEMENTS = 100_000;
+const MAX_OP_BYTES = 1_000_000; // ~1 MB serialized per single canvas op
+
 // ─── Handler Functions ────────────────────────────────────────────────────────
 
 // draw event payload: { roomId, stroke: { id, type, points, color, width, ... } }
@@ -22,6 +26,11 @@ function onCursorMove(socket, payload) {
 // Expected payload: { roomId: string, op: { type, id?, object? } }
 function onCanvasOp(socket, payload) {
     try { ensureAuthorizedRoom(socket, payload.roomId); } catch (e) { return; }
+    // Drop oversized ops rather than fanning them out to every peer.
+    if (JSON.stringify(payload.op || null).length > MAX_OP_BYTES) {
+        console.warn(`[CanvasOp] Dropped oversized op for room ${payload.roomId}`);
+        return;
+    }
     socket.to(payload.roomId).emit('canvas_op_received', { op: payload.op });
     markRoomActivity(payload?.roomId);
 }
@@ -39,6 +48,10 @@ function onCanvasBgChange(socket, payload) {
 // Client pushes a full canvas snapshot for server-side persistence
 async function onSaveSnapshot(socket, { roomId, elements, sceneVersion }) {
     if (!roomId || !Array.isArray(elements) || typeof sceneVersion !== 'number') return;
+    if (elements.length > MAX_SNAPSHOT_ELEMENTS) {
+        console.warn(`[Snapshot] Rejected oversized snapshot (${elements.length} elements) for room ${roomId}`);
+        return;
+    }
     try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
     try {
         await updateRoomService({
@@ -80,6 +93,10 @@ function onCanvasStateRequest(socket, { roomId }) {
 function onCanvasStateResponse(io, socket, { requesterId, snapshot }) {
     const roomId = socket.data.auth?.roomId;
     if (!roomId) return;
+    // Only forward to a requester that is actually in the responder's room,
+    // so a client can't push forged state to arbitrary (cross-room) sockets.
+    const roomMembers = io.sockets.adapter.rooms.get(roomId);
+    if (!roomMembers || !roomMembers.has(requesterId)) return;
     io.to(requesterId).emit('canvas_state_init', { snapshot });
 }
 

@@ -1,5 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
+import VolumePopup from '../VolumePopup/VolumePopup'
 import './MembersPanel.css'
+
+// Reconstruct a user's LiveKit identity from their socket id + name.
+// Must match the server: `${username}-${socket.id.slice(-4)}` (livekit.handler.js).
+function livekitIdentity(username, socketId) {
+  return `${username}-${socketId.slice(-4)}`
+}
 
 const AVATAR_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
@@ -29,8 +36,9 @@ function Avatar({ name, size = 28 }) {
   )
 }
 
-export default function MembersPanel({ currentUser, connectedUsers, isConnected }) {
+export default function MembersPanel({ currentUser, connectedUsers, isConnected, participantVolumes = {}, onSetUserVolume }) {
   const [open, setOpen] = useState(false)
+  const [volumeMenu, setVolumeMenu] = useState(null) // { identity, name, x, y }
   const ref = useRef(null)
 
   // Total count includes self
@@ -78,18 +86,44 @@ export default function MembersPanel({ currentUser, connectedUsers, isConnected 
           </div>
 
           <ul className="members-list">
-            {allUsers.map((u) => (
-              <li key={u.socketId} className="member-row">
-                <Avatar name={u.username} size={32} />
-                <span className="member-name">
-                  {u.username}
-                  {u.socketId === 'self' && <span className="you-badge">you</span>}
-                </span>
-                <span className="member-online-dot" />
-              </li>
-            ))}
+            {allUsers.map((u) => {
+              const isSelf = u.socketId === 'self'
+              return (
+                <li
+                  key={u.socketId}
+                  className="member-row"
+                  title={isSelf ? undefined : 'Right-click to adjust volume'}
+                  onContextMenu={isSelf ? undefined : (e) => {
+                    e.preventDefault()
+                    setVolumeMenu({
+                      identity: livekitIdentity(u.username, u.socketId),
+                      name: u.username,
+                      x: e.clientX,
+                      y: e.clientY,
+                    })
+                  }}
+                >
+                  <Avatar name={u.username} size={32} />
+                  <span className="member-name">
+                    {u.username}
+                    {isSelf && <span className="you-badge">you</span>}
+                  </span>
+                  <span className="member-online-dot" />
+                </li>
+              )
+            })}
           </ul>
         </div>
+      )}
+
+      {volumeMenu && (
+        <VolumePopup
+          label={`${volumeMenu.name} — mic volume`}
+          volume={participantVolumes[volumeMenu.identity] ?? 1}
+          onChange={(v) => onSetUserVolume?.(volumeMenu.identity, v)}
+          onClose={() => setVolumeMenu(null)}
+          position={{ x: volumeMenu.x, y: volumeMenu.y }}
+        />
       )}
     </div>
   )

@@ -43,6 +43,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
   const [showInstallHint, setShowInstallHint] = useState(false)
   const [sharingShareId, setSharingShareId] = useState(null)
   const [sharingDisplaySurface, setSharingDisplaySurface] = useState(null)
+  const [shareVolumes, setShareVolumes] = useState({}) // shareId -> 0..1 (remote screen-share audio)
 
   const localStreamRef = useRef(null)
   const shareIdRef = useRef(null)
@@ -50,6 +51,14 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
   const displaySurfaceRef = useRef(null)
   const videoElementsRef = useRef(new Map()) // shareId -> HTMLVideoElement
   const proxyRectsRef = useRef(new Map()) // shareId -> fabric.Rect
+  const audioElementsRef = useRef(new Map()) // shareId -> HTMLAudioElement (remote screen-share audio)
+
+  // Set the playback volume (0..1) of a remote screen-share's audio.
+  const setShareVolume = useCallback((shareId, volume) => {
+    setShareVolumes(prev => ({ ...prev, [shareId]: volume }))
+    const audioEl = audioElementsRef.current.get(shareId)
+    if (audioEl) audioEl.volume = volume
+  }, [])
 
   const usernameRef = useRef(username)
   useEffect(() => {
@@ -72,6 +81,13 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     }
     videoElementsRef.current.delete(shareId)
     proxyRectsRef.current.delete(shareId)
+
+    const audioEl = audioElementsRef.current.get(shareId)
+    if (audioEl) {
+      audioEl.srcObject = null
+      if (audioEl.parentNode) audioEl.parentNode.removeChild(audioEl)
+    }
+    audioElementsRef.current.delete(shareId)
   }, [fabricCanvas])
 
   // Build video constraints from resolution and fps options
@@ -180,6 +196,10 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
         return
       }
 
+      // Tell the encoder to preserve detail (sharp text/UI) over smooth motion —
+      // the default optimizes for motion and makes screen content look blurry.
+      videoTrack.contentHint = 'detail'
+
       const audioTrack = stream.getAudioTracks()[0]
       const displaySurface = videoTrack.getSettings().displaySurface
       displaySurfaceRef.current = displaySurface
@@ -191,11 +211,20 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       setSharingShareId(shareId)
       setSharingDisplaySurface(displaySurface)
 
-      // Publish video track to LiveKit (with shareId as track name for remote identification)
+      // Publish video track to LiveKit (with shareId as track name for remote identification).
+      // Explicit high bitrate + maintain-resolution prevents the conservative default
+      // bitrate (and WebRTC's resolution-dropping) from softening detailed screen content.
+      const maxBitrate = initialRes === '4k' ? 10_000_000 : initialRes === '720p' ? 2_500_000 : 4_000_000
       try {
         await room.localParticipant.publishTrack(videoTrack, {
           source: Track.Source.ScreenShare,
           name: shareId,
+          // Disable simulcast: screen-share simulcast is on by default and produces a
+          // low (~180p) layer that adaptiveStream selects when the viewer's overlay
+          // element renders small — making the share look ~144p. One full-res layer fixes it.
+          simulcast: false,
+          videoEncoding: { maxBitrate, maxFramerate: initialFps },
+          degradationPreference: 'maintain-resolution',
         })
         console.log('[ScreenShare] Video track published to LiveKit')
 
@@ -364,6 +393,24 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     if (!room || !fabricCanvas || !screenShareLayer) return
 
     const handleTrackSubscribed = (track, publication, participant) => {
+      // Screen-share audio: play it in a hidden <audio> element, volume-controllable.
+      if (track.source === Track.Source.ScreenShareAudio && track.kind === Track.Kind.Audio) {
+        const trackName = publication.trackName || ''
+        const shareId = trackName.endsWith('-audio') ? trackName.slice(0, -6) : trackName
+        if (!shareId || audioElementsRef.current.has(shareId)) return
+
+        const audioEl = document.createElement('audio')
+        audioEl.srcObject = new MediaStream([track.mediaStreamTrack])
+        audioEl.autoplay = true
+        audioEl.style.display = 'none'
+        audioEl.volume = 1
+        document.body.appendChild(audioEl)
+        audioEl.play().catch(err => console.warn('[ScreenShare] Audio autoplay blocked:', err))
+        audioElementsRef.current.set(shareId, audioEl)
+        console.log(`[ScreenShare] Remote screen-share audio attached (${shareId})`)
+        return
+      }
+
       // Only handle screen share video tracks
       if (track.source !== Track.Source.ScreenShare || track.kind !== Track.Kind.Video) {
         return
@@ -408,6 +455,19 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     }
 
     const handleTrackUnsubscribed = (track, publication, participant) => {
+      // Screen-share audio removed: tear down its hidden <audio> element.
+      if (track.source === Track.Source.ScreenShareAudio && track.kind === Track.Kind.Audio) {
+        const trackName = publication.trackName || ''
+        const shareId = trackName.endsWith('-audio') ? trackName.slice(0, -6) : trackName
+        const audioEl = audioElementsRef.current.get(shareId)
+        if (audioEl) {
+          audioEl.srcObject = null
+          if (audioEl.parentNode) audioEl.parentNode.removeChild(audioEl)
+          audioElementsRef.current.delete(shareId)
+        }
+        return
+      }
+
       if (track.source !== Track.Source.ScreenShare || track.kind !== Track.Kind.Video) {
         return
       }
@@ -489,5 +549,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     dismissOverlay,
     showInstallHint,
     dismissInstallHint,
+    shareVolumes,
+    setShareVolume,
   }
 }

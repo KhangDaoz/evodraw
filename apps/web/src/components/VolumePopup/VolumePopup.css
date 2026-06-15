@@ -1,0 +1,116 @@
+.volume-popup {
+  position: fixed;
+  z-index: 10000;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  padding: 12px 14px;
+  width: 230px;
+  user-select: none;
+  animation: volumePopupIn 0.16s ease-out both;
+}
+
+@keyframes volumePopupIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.volume-popup-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.volume-popup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Mute / unmute speaker toggle */
+.volume-popup-mute {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-light);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.volume-popup-mute:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* Slider with accent-colored fill on the left of the thumb */
+.volume-popup-row input[type='range'] {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) var(--fill, 100%),
+    var(--border) var(--fill, 100%),
+    var(--border) 100%
+  );
+  cursor: pointer;
+  outline: none;
+}
+
+.volume-popup-row input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transition: transform 0.1s;
+}
+
+.volume-popup-row input[type='range']::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.volume-popup-row input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.volume-popup-row input[type='range']::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.volume-popup-value {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  width: 36px;
+  text-align: right;
+  color: var(--text-light);
+}

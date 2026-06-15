@@ -78,7 +78,9 @@ function handleDeepLink(url) {
     const params = {
       room: parsed.searchParams.get('room'),
       token: parsed.searchParams.get('token'),
-      server: parsed.searchParams.get('server') || store.get('serverUrl', process.env.DEFAULT_SERVER_URL || 'http://localhost:4000'),
+      // Ignore any server override from the (untrusted) deep link — a malicious link
+      // could otherwise redirect the socket connection, leaking the token to an attacker.
+      server: store.get('serverUrl', process.env.DEFAULT_SERVER_URL || 'http://localhost:4000'),
       shareId: parsed.searchParams.get('shareId'),
       username: parsed.searchParams.get('username'),
       displaySurface: parsed.searchParams.get('displaySurface') || 'monitor',
@@ -91,8 +93,6 @@ function handleDeepLink(url) {
     if (overlayWindow && overlayWindow.webContents) {
       overlayWindow.show();
       overlayWindow.setContentProtection(true);
-      // TEMP DEBUG — open DevTools when the overlay surfaces so we can see renderer errors
-      overlayWindow.webContents.openDevTools({ mode: 'detach' });
       overlayWindow.webContents.send('deep-link', params);
     } else {
       pendingDeepLink = params;
@@ -251,8 +251,6 @@ function setupIPC() {
     if (params && overlayWindow) {
       overlayWindow.show();
       overlayWindow.setContentProtection(true);
-      // TEMP DEBUG
-      overlayWindow.webContents.openDevTools({ mode: 'detach' });
     }
     return params;
   });
@@ -280,7 +278,8 @@ app.whenReady().then(() => {
       pendingDeepLink = {
         room: parsed.searchParams.get('room'),
         token: parsed.searchParams.get('token'),
-        server: parsed.searchParams.get('server') || store.get('serverUrl', process.env.DEFAULT_SERVER_URL || 'http://localhost:4000'),
+        // Ignore any server override from the (untrusted) deep link (see handleDeepLink).
+        server: store.get('serverUrl', process.env.DEFAULT_SERVER_URL || 'http://localhost:4000'),
         shareId: parsed.searchParams.get('shareId'),
         username: parsed.searchParams.get('username'),
       };

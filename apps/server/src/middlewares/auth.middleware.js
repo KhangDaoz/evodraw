@@ -1,8 +1,8 @@
 import { verifyToken } from '../services/token.service.js';
 
 export function validateToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader.split(' ')[1]; 
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.split(' ')[1];
 
     if(!token) {
         return res.status(401).json({ success: false, message: 'Access denied. No token provided.' });

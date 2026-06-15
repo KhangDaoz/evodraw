@@ -238,3 +238,39 @@ export async function loadCanvasSnapshot(canvas, snapshot, state) {
     state._applying = false
   }
 }
+
+/**
+ * Export toàn bộ canvas thành JSON string để lưu file.
+ * Tương đương Room.exportBoard() trong sơ đồ thiết kế.
+ */
+export function exportBoardToJSON(canvas) {
+  const snapshot = serializeCanvas(canvas)
+  const exportData = {
+    version: 1,
+    app: 'evodraw',
+    exportedAt: new Date().toISOString(),
+    elements: snapshot.objects,
+    sceneVersion: snapshot.sceneVersion,
+  }
+  return JSON.stringify(exportData, null, 2)
+}
+
+/**
+ * Import JSON string → khôi phục canvas (replace mode).
+ * Tương đương Room.importBoard() trong sơ đồ thiết kế.
+ */
+export async function importBoardFromJSON(canvas, jsonString, syncState) {
+  const data = JSON.parse(jsonString)
+
+  if (data.app !== 'evodraw' || !Array.isArray(data.elements)) {
+    throw new Error('Invalid EvoDraw file format')
+  }
+
+  const snapshot = {
+    objects: data.elements,
+    sceneVersion: (data.sceneVersion || 0) + 1,
+  }
+
+  await loadCanvasSnapshot(canvas, snapshot, syncState)
+  return snapshot
+}

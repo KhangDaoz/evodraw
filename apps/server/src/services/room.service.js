@@ -79,6 +79,20 @@ export async function getRoom({ code, passcode, skipPasscodeCheck = false }) {
 	return safeRoom;
 }
 
+/**
+ * Verify a room code + passcode without throwing (for the socket join path).
+ * Returns true only when the room exists and the passcode matches.
+ */
+export async function verifyRoomAccess({ code, passcode }) {
+	const normalizedCode = String(code || '').trim().toUpperCase();
+	if (!normalizedCode) return false;
+
+	const room = await Room.findOne({ code: normalizedCode });
+	if (!room) return false;
+
+	return bcrypt.compare(String(passcode || ''), room.passcode);
+}
+
 export async function updateRoomService({ code, roomVersion, elements, appState, status }) {
 	const normalizedCode = String(code || '').trim().toUpperCase();
 

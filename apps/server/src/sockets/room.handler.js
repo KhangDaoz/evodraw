@@ -1,6 +1,5 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
-import Room from '../models/Room.js';
-import bcrypt from 'bcrypt';
+import { verifyRoomAccess } from '../services/room.service.js';
 import { ensureAuthorizedRoom } from '../utils/guard.js';
 
 // In-memory brute-force guard for socket joins, keyed on client IP.
@@ -36,8 +35,7 @@ async function joinRoom(io, socket, payload) {
     }
 
     try {
-        const room = await Room.findOne({ code: roomId.toUpperCase() });
-        if (!room || !await bcrypt.compare(passcode, room.passcode)) {
+        if (!await verifyRoomAccess({ code: roomId, passcode })) {
             socket.emit('room_error', { message: 'Invalid room code or passcode.' });
             return;
         }

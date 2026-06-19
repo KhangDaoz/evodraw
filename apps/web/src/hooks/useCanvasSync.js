@@ -31,7 +31,10 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
     const socket = getSocket()
     if (!socket || !socket.connected) return
 
-    snapshotLoadedRef.current = false
+    // NOTE: do NOT reset snapshotLoadedRef here. This effect re-runs on every
+    // reconnect; resetting it would let a stale server snapshot destructively
+    // reload (canvas.clear) and wipe newer local work. The ref persists for the
+    // room session (a different room remounts the component → fresh ref).
 
     // ── Outbound: local changes → server ──
     const detach = attachSerializer(canvas, (op) => {
@@ -45,13 +48,22 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
 
     // ── Server snapshot recovery (primary) ──
     const onSnapshotLoaded = async ({ elements, sceneVersion }) => {
-      if (snapshotLoadedRef.current) return // Already loaded, skip
-      if (elements) {
-        snapshotLoadedRef.current = true
-        await loadCanvasSnapshot(canvas, { objects: elements, sceneVersion }, syncState.current)
-        lastPushedVersionRef.current = sceneVersion || 0
-        console.log(`[Sync] Loaded server snapshot (v${sceneVersion}, ${elements.length} elements)`)
+      if (!elements) return
+      if (snapshotLoadedRef.current) {
+        // Already initialized (e.g. after a reconnect). Merge via LWW instead of
+        // a destructive reload, so a stale/older server snapshot can't wipe newer
+        // local objects — higher local versions win; only missing ones are added.
+        for (const json of elements) {
+          await applyRemoteOp(canvas, { type: 'object:added', object: json }, syncState.current)
+        }
+        canvas.requestRenderAll()
+        return
       }
+      // First load for this room session: replace the (empty) canvas.
+      snapshotLoadedRef.current = true
+      await loadCanvasSnapshot(canvas, { objects: elements, sceneVersion }, syncState.current)
+      lastPushedVersionRef.current = sceneVersion || 0
+      console.log(`[Sync] Loaded server snapshot (v${sceneVersion}, ${elements.length} elements)`)
     }
 
     // ── Peer-to-peer fallback (secondary) ──

@@ -16,8 +16,11 @@ export function connectSocket() {
   socket = io(SERVER_URL, {
     transports: ['polling', 'websocket'],
     reconnection: true,
-    reconnectionAttempts: 5,
+    // Keep retrying indefinitely with backoff so a transient drop or a slow
+    // server wake-up doesn't permanently kill the session after a few tries.
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
     timeout: 10000,
     auth: {
       token

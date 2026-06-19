@@ -93,10 +93,13 @@ function onCanvasStateRequest(socket, { roomId }) {
 function onCanvasStateResponse(io, socket, { requesterId, snapshot }) {
     const roomId = socket.data.auth?.roomId;
     if (!roomId) return;
-    // Only forward to a requester that is actually in the responder's room,
-    // so a client can't push forged state to arbitrary (cross-room) sockets.
-    const roomMembers = io.sockets.adapter.rooms.get(roomId);
-    if (!roomMembers || !roomMembers.has(requesterId)) return;
+    // Forward only to a requester whose TOKEN authorizes the same room. We check
+    // the token (set synchronously at connection) rather than room membership,
+    // because joinRoom is async (awaits bcrypt) and the requester may not have
+    // finished joining when this fast peer response arrives — checking membership
+    // would drop the late joiner's state. This still blocks cross-room spoofing.
+    const requester = io.sockets.sockets.get(requesterId);
+    if (!requester || requester.data.auth?.roomId !== roomId) return;
     io.to(requesterId).emit('canvas_state_init', { snapshot });
 }
 

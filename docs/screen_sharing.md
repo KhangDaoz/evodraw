@@ -250,7 +250,8 @@ Người dùng có thể thao tác với Object chia sẻ màn hình thoải má
 4. canvas.requestRenderAll() → after:render → syncOverlayPosition()
 5. DOM overlay di chuyển theo → mọi người thấy cùng vị trí
 6. LWW reconciliation giải quyết xung đột nếu có
-```9. Tích hợp WebRTC & LiveKit
+```
+9. Tích hợp WebRTC & LiveKit
 
 **LiveKit Integration:**
 - Client sử dụng `@livekit/components-react` để quản lý kết nối SFU

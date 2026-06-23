@@ -26,6 +26,10 @@ export default function useRoom(roomCode, currentUsername, passcode) {
 
   const handleDisconnect = useCallback((reason) => {
     setIsConnected(false)
+    // Allow re-joining the room on the next (re)connect. Socket.IO assigns a new
+    // socket id and does NOT restore room membership after a drop, so without this
+    // the reconnected socket stays outside the room (no canvas_op/room_users sync).
+    hasJoined.current = false
     if (reason === 'io server disconnect') {
       setError('Disconnected by server')
     }

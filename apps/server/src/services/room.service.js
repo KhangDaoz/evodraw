@@ -93,7 +93,7 @@ export async function verifyRoomAccess({ code, passcode }) {
 	return bcrypt.compare(String(passcode || ''), room.passcode);
 }
 
-export async function updateRoomService({ code, roomVersion, elements, appState, status }) {
+export async function updateRoomService({ code, elements, appState, status }) {
 	const normalizedCode = String(code || '').trim().toUpperCase();
 
 	if (!normalizedCode) {
@@ -112,13 +112,12 @@ export async function updateRoomService({ code, roomVersion, elements, appState,
 		throw error;
 	}
 
-	if (roomVersion !== undefined && roomVersion <= room.roomVersion) {
-		const error = new Error('Room version is outdated. Please refresh to get the latest room.');
-		error.statusCode = 400;
-		throw error;
-	}
-
-	room.roomVersion = roomVersion;
+	// Server-authoritative versioning (last-write-wins): the server owns a single
+	// monotonically increasing roomVersion. We no longer reject based on the client's
+	// own sceneVersion — those counters are per-client and not comparable across
+	// clients, which previously left the stored snapshot stuck/stale. Clients stay
+	// converged via live LWW canvas_op, so the latest full snapshot is authoritative.
+	room.roomVersion = (room.roomVersion || 0) + 1;
 	room.elements = elements !== undefined ? elements : room.elements;
 	room.appState = appState !== undefined ? appState : room.appState;
 	room.status = status !== undefined ? status : room.status;

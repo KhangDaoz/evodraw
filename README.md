@@ -40,7 +40,7 @@ Evodraw is a real-time collaborative whiteboard featuring a React web applicatio
 ### Homepage
 ![EvoDraw Homepage](./apps/web/public/homepage.png)
 
-### Real-Time Collaborative Whiteboard
+### Whiteboard
 ![EvoDraw Whiteboard](./apps/web/public/whiteboard.png)
 
 ### Screen Sharing on Canvas
@@ -50,12 +50,12 @@ Evodraw is a real-time collaborative whiteboard featuring a React web applicatio
 
 ## Features
 
-- **Real-Time Sync:** Drawing actions (pen strokes, shapes, text, eraser) sync instantly across all users using Fabric.js and Socket.IO.
-- **Conflict Resolution (LWW):** Element-level conflict resolution prevents overwriting newer drawings with older ones.
-- **Desktop Overlay:** An Electron desktop app to draw directly on your screen. Stroke coordinates map cleanly to web viewers.
-- **Screen Sharing:** Share screens using LiveKit SFU. The stream displays on the canvas inside a resizable box.
-- **Paste Images:** Paste images (Ctrl+V) from your clipboard. Images upload to Firebase Storage and render on everyone's canvas.
-- **Secure Rooms:** Rooms are protected by password hashes. Inactive rooms are deleted automatically after 24 hours.
+- **Real-Time Sync:** Drawing actions (pen strokes, shapes, text, eraser) sync instantly across all connected users using Fabric.js and Socket.IO.
+- **Conflict Resolution (LWW):** Element-level Last-Write-Wins logic ensures concurrent edits resolve smoothly without overwriting newer data.
+- **Desktop Overlay:** A transparent Electron desktop application lets you sketch directly over your screen, mapping your local stroke coordinates cleanly to all web viewers.
+- **Live Screen Sharing:** Users can broadcast their screens via a LiveKit SFU video stream, which renders directly on the canvas as a resizable, draggable object.
+- **Clipboard Image Pasting:** Paste images (Ctrl+V) directly onto the canvas; assets automatically upload to Firebase Storage and render globally.
+- **Secure & Ephemeral Rooms:** Shared spaces are protected by password hashes, and inactive rooms are automatically deleted after 24 hours to optimize storage.
 
 ---
 
@@ -98,8 +98,8 @@ The project uses `npm workspaces` for monorepo management:
 
 - **Node.js**: `>= 16.0.0`
 - **npm**: `>= 8.0.0`
-- **Docker** & **Docker Compose**: For containerized development (optional)
-- **MongoDB**: Database for room snapshots (or use Docker)
+- **Docker** & **Docker Compose**: For containerized development
+- **MongoDB**: Database for room snapshots
 - **Firebase Project**: Storage bucket for clipboard images
 - **LiveKit Server**: A/V streaming keys
 
@@ -184,7 +184,7 @@ docker compose ps
 # View server logs
 docker compose logs -f server
 
-# Run the frontend on your host (HMR needs direct browser access)
+# Run the frontend on your host
 npm run dev:web
 ```
 

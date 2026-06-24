@@ -1,8 +1,8 @@
 import { useCallback } from 'react'
 import { getSocket } from '../services/socket'
 import {
-  exportBoardToJSON,
-  importBoardFromJSON,
+  exportBoard,
+  importBoard,
   serializeCanvas,
   getSceneVersion,
 } from '../utils/canvasSerializer'
@@ -18,13 +18,13 @@ export default function useDocumentManager(fabricCanvas, syncState, roomId) {
 
   /**
    * Luồng Export (theo sơ đồ tuần tự):
-   * SettingsPanel → handleExport → exportBoardToJSON (serialize CanvasElement)
+   * SettingsPanel → handleExport → exportBoard (serialize CanvasElement)
    *               → trigger browser download file .json
    */
   const handleExport = useCallback(() => {
     if (!fabricCanvas) return
 
-    const jsonString = exportBoardToJSON(fabricCanvas)
+    const jsonString = exportBoard(fabricCanvas)
     const blob = new Blob([jsonString], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
 
@@ -40,7 +40,7 @@ export default function useDocumentManager(fabricCanvas, syncState, roomId) {
   /**
    * Luồng Import (theo sơ đồ tuần tự):
    * SettingsPanel → handleImport → đọc file
-   *               → importBoardFromJSON (deserialize CanvasElement → Canvas render)
+   *               → importBoard (deserialize CanvasElement → Canvas render)
    *               → emit sync cho các thành viên khác qua Socket.IO
    */
   const handleImport = useCallback((file) => {
@@ -50,7 +50,7 @@ export default function useDocumentManager(fabricCanvas, syncState, roomId) {
     reader.onload = async (e) => {
       try {
         const jsonString = e.target.result
-        await importBoardFromJSON(fabricCanvas, jsonString, syncState.current)
+        await importBoard(fabricCanvas, jsonString, syncState.current)
 
         // ── Đồng bộ cho peers sau khi import ──
         const socket = getSocket()

@@ -25,7 +25,7 @@ export default function LandingPage() {
     if (showOverlay) setShowOverlay(false)
   }, [showOverlay])
 
-  const handleInteractionCreateRoom = async () => {
+  const handleCreateRoom = async () => {
     if (loading) return
     const username = displayName.trim() || generateAnonymousName()
     localStorage.setItem('evodraw_username', username)
@@ -46,7 +46,7 @@ export default function LandingPage() {
   const handleToolSelect = (toolId) => {
     setActiveTool(toolId)
     if (showOverlay) {
-      handleInteractionCreateRoom()
+      handleCreateRoom()
     } else {
       dismissOverlay()
     }
@@ -54,7 +54,7 @@ export default function LandingPage() {
 
   const handleCanvasClick = () => {
     if (showOverlay) {
-      handleInteractionCreateRoom()
+      handleCreateRoom()
     } else {
       dismissOverlay()
     }
@@ -117,7 +117,7 @@ export default function LandingPage() {
 
             <button
               className="create-room-btn"
-              onClick={handleInteractionCreateRoom}
+              onClick={handleCreateRoom}
               disabled={loading}
             >
               {loading ? '...' : 'Create new room'}

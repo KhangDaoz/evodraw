@@ -9,6 +9,7 @@
     <img src="https://img.shields.io/badge/socket.io-v4-orange.svg" alt="Socket.io" />
     <img src="https://img.shields.io/badge/react-19-blue.svg" alt="React 19" />
     <img src="https://img.shields.io/badge/electron-latest-lightblue.svg" alt="Electron" />
+    <img src="https://img.shields.io/badge/docker-ready-blue.svg?logo=docker" alt="Docker" />
     <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
   </p>
 </div>
@@ -28,8 +29,8 @@
 - [Installation](#installation)
 - [Environment Configuration](#environment-configuration)
 - [Usage & Quick Start](#usage--quick-start)
-- [Development Commands](#development-commands)
-- [Troubleshooting](#troubleshooting)
+- [Docker](#docker)
+- [Deployment](#deployment)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -98,7 +99,8 @@ The project uses `npm workspaces` for monorepo management:
 
 - **Node.js**: `>= 16.0.0`
 - **npm**: `>= 8.0.0`
-- **MongoDB**: Database for room snapshots
+- **Docker** & **Docker Compose**: For containerized development (optional)
+- **MongoDB**: Database for room snapshots (or use Docker)
 - **Firebase Project**: Storage bucket for clipboard images
 - **LiveKit Server**: A/V streaming keys
 
@@ -128,8 +130,11 @@ LIVEKIT_API_KEY=your-livekit-api-key
 LIVEKIT_API_SECRET=your-livekit-api-secret
 LIVEKIT_URL=wss://your-livekit-url.livekit.cloud
 
-# Firebase
+# Firebase (choose one of the two methods below)
+# Method 1 — Local dev: path to the JSON key file
 FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
+# Method 2 — Production (Render): paste the entire JSON as a string
+# FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 FIREBASE_STORAGE_BUCKET=your-app.appspot.com
 ```
 
@@ -163,41 +168,40 @@ npm run dev:web
 npm run dev:desktop
 ```
 
-### Simple Walkthrough
-1. Run `npm run dev` to start everything.
-2. Open `http://localhost:5173` in your browser.
-3. Click the **Present / Draw on Desktop** button to open the Electron overlay app.
-4. Draw on your screen, and watch the updates sync in real time to the web client.
+---
+
+## Docker
+
+You can run the backend server and MongoDB locally using Docker Compose without installing MongoDB on your host machine.
+
+### Quick Start with Docker
+```bash
+# Start server + MongoDB containers
+docker compose up --build -d
+
+# Check that both containers are running
+docker compose ps
+
+# View server logs
+docker compose logs -f server
+
+# Run the frontend on your host (HMR needs direct browser access)
+npm run dev:web
+```
+
+Open `http://localhost:5173` in your browser.
 
 ---
 
-## Development Commands
+## Deployment
 
-- **Lint Web Code**: `npm run lint -w apps/web`
-- **Build Web Assets**: `npm run build -w apps/web`
-- **Package Electron App**: `npm run make -w apps/desktop`
+The project is set up for automatic deployment on every `git push` to `main`:
 
----
-
-## Troubleshooting
-
-#### 1. Port already in use
-* **Issue:** Server fails to start because port `4000` or `5173` is taken.
-* **Fix:** Change the port in the `.env` file or kill the active process:
-  ```bash
-  kill -9 $(lsof -t -i:4000)
-  ```
-
-#### 2. MongoDB connection errors
-* **Issue:** Server crashes because it cannot connect to MongoDB.
-* **Fix:** Make sure MongoDB is running locally:
-  ```bash
-  mongod
-  ```
-
-#### 3. Deep link protocol registration
-* **Issue:** Clicking the desktop button in the web app does not launch the Electron app.
-* **Fix:** Start the desktop app manually using `npm run dev:desktop` once to register the protocol on your machine.
+| Component | Platform | URL |
+|-----------|----------|-----|
+| **Backend** | [Render](https://render.com) (Docker runtime) | `https://evodraw-v9rt.onrender.com` |
+| **Frontend** | [Vercel](https://vercel.com) | `https://evodraw.vercel.app` |
+| **Database** | [MongoDB Atlas](https://www.mongodb.com/atlas) | Cloud cluster |
 
 ---
 

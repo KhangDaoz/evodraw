@@ -1,7 +1,6 @@
 <div align="center">
   <img src="./apps/web/public/icon.png" alt="evodraw icon" width="96" height="96" />
-  <h1>evodraw</h1>
-  <p><strong>Real-time Collaborative Whiteboard with Desktop Overlay & Screen Sharing</strong></p>
+  <h1>Evodraw</h1>
 
   <p>
     <a href="https://github.com/KhangDaoz/evodraw/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a>
@@ -16,7 +15,7 @@
 
 ---
 
-**evodraw** is a real-time collaborative whiteboard. It lets multiple users draw together on a shared canvas. The project includes a React web application, a Node.js server, and a transparent Electron desktop application to draw directly on top of your screen.
+Evodraw is a real-time collaborative whiteboard featuring a React web application and a Node.js server that allow multiple users to draw together on a shared canvas. It also includes a transparent Electron desktop application, enabling you to sketch directly on top of your screen.
 
 ---
 

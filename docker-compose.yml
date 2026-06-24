@@ -9,8 +9,8 @@ services:
     restart: unless-stopped
   server:
     build:
-      context: ./apps/server
-      dockerfile: Dockerfile
+      context: .                          # Repo root = Docker context
+      dockerfile: apps/server/Dockerfile  # Đường dẫn tương đối từ root
     container_name: evodraw-server
     ports:
       - "4000:4000"

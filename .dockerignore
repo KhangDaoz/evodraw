@@ -1,0 +1,30 @@
+# Docker context = repo root, nên .dockerignore phải ở đây.
+# Loại trừ mọi thứ không cần cho server build.
+
+# Dependencies (mỗi stage tự npm install riêng)
+**/node_modules
+
+# Env files (secrets không được bake vào image)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Build outputs
+**/dist
+**/out
+**/.vite
+
+# Không cần frontend và desktop trong server image
+apps/web
+apps/desktop
+
+# Không cần docs, git history
+docs
+.git
+.gitignore
+.gitattributes
+README.md
+
+# Editor/IDE
+.vscode
+.idea

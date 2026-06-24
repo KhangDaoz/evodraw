@@ -19,19 +19,6 @@
 
 ---
 
-## Screenshots
-
-### Homepage
-![EvoDraw Homepage](./apps/web/public/homepage.png)
-
-### Real-Time Collaborative Whiteboard
-![EvoDraw Whiteboard](./apps/web/public/whiteboard.png)
-
-### Screen Sharing on Canvas
-![EvoDraw Screen Sharing](./apps/web/public/sharescreen.png)
-
----
-
 ## Table of Contents
 - [Screenshots](#screenshots)
 - [Features](#features)
@@ -45,6 +32,19 @@
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
+
+---
+
+## Screenshots
+
+### Homepage
+![EvoDraw Homepage](./apps/web/public/homepage.png)
+
+### Real-Time Collaborative Whiteboard
+![EvoDraw Whiteboard](./apps/web/public/whiteboard.png)
+
+### Screen Sharing on Canvas
+![EvoDraw Screen Sharing](./apps/web/public/sharescreen.png)
 
 ---
 

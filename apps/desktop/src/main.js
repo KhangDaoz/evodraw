@@ -39,6 +39,19 @@ let tray = null;
 let isDrawingMode = false;
 let pendingDeepLink = null;
 
+// Backends the desktop app is allowed to connect to. A deep link's `server`
+// param is honored only if it's on this list — a malicious link could otherwise
+// redirect the socket to an attacker-controlled host and leak the JWT. The
+// production URL is baked in at build time (see vite.main.config.mjs).
+const TRUSTED_SERVERS = new Set(
+  [process.env.DEFAULT_SERVER_URL, 'http://localhost:4000', 'http://127.0.0.1:4000'].filter(Boolean)
+);
+
+function resolveServer(rawServer) {
+  if (rawServer && TRUSTED_SERVERS.has(rawServer)) return rawServer;
+  return store.get('serverUrl', process.env.DEFAULT_SERVER_URL || 'http://localhost:4000');
+}
+
 // ── Deep Link Protocol ──
 const PROTOCOL = 'evodraw';
 if (process.defaultApp) {
@@ -78,9 +91,8 @@ function handleDeepLink(url) {
     const params = {
       room: parsed.searchParams.get('room'),
       token: parsed.searchParams.get('token'),
-      // Ignore any server override from the (untrusted) deep link — a malicious link
-      // could otherwise redirect the socket connection, leaking the token to an attacker.
-      server: store.get('serverUrl', process.env.DEFAULT_SERVER_URL || 'http://localhost:4000'),
+      // Honor the deep link's server only if it's a trusted backend (see resolveServer).
+      server: resolveServer(parsed.searchParams.get('server')),
       shareId: parsed.searchParams.get('shareId'),
       username: parsed.searchParams.get('username'),
       displaySurface: parsed.searchParams.get('displaySurface') || 'monitor',
@@ -278,8 +290,8 @@ app.whenReady().then(() => {
       pendingDeepLink = {
         room: parsed.searchParams.get('room'),
         token: parsed.searchParams.get('token'),
-        // Ignore any server override from the (untrusted) deep link (see handleDeepLink).
-        server: store.get('serverUrl', process.env.DEFAULT_SERVER_URL || 'http://localhost:4000'),
+        // Honor the deep link's server only if it's a trusted backend (see resolveServer).
+        server: resolveServer(parsed.searchParams.get('server')),
         shareId: parsed.searchParams.get('shareId'),
         username: parsed.searchParams.get('username'),
       };

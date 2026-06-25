@@ -12,6 +12,18 @@ import fileRoutes from './routes/file.routes.js';
 // cors configuration - allow localhost and any origins specified in .env
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(',').map(o => o.trim());
 
+// A request is allowed when it has no Origin (non-browser client), an opaque
+// "null" origin (packaged Electron desktop app loaded from file://), a
+// localhost origin, or an origin explicitly listed in ALLOWED_ORIGINS. Socket
+// and REST access are still gated by the JWT auth middleware, so this only
+// governs which browsers/clients may talk to the API, not authorization.
+const isAllowedOrigin = (origin) =>
+    !origin ||
+    origin === 'null' ||
+    ALLOWED_ORIGINS.includes(origin) ||
+    origin.startsWith('http://localhost:') ||
+    origin.startsWith('http://127.0.0.1:');
+
 // app initialization
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -21,7 +33,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
         origin: (origin, callback) => {
-            if (!origin || ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+            if (isAllowedOrigin(origin)) {
                 callback(null, true);
             } else {
                 callback(new Error('Not allowed by CORS'));
@@ -38,7 +50,7 @@ initializeSockets(io);
 // global middleware
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        if (isAllowedOrigin(origin)) {
             callback(null, true);
         } else {
             console.error(`[CORS Blocked] Origin: ${origin} not in ${ALLOWED_ORIGINS}`);

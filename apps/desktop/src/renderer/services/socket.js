@@ -7,6 +7,10 @@ export function connectSocket(serverUrl) {
 
   const token = localStorage.getItem('token');
 
+  // Note: the renderer runs in a standard Chromium context (contextIsolation,
+  // no nodeIntegration), so `Origin` is a forbidden header and cannot be set
+  // from here. The packaged app loads via file://, so it sends `Origin: null`;
+  // the server allows that opaque origin for the native desktop client.
   socket = io(serverUrl, {
     transports: ['polling', 'websocket'],
     reconnection: true,
@@ -14,9 +18,6 @@ export function connectSocket(serverUrl) {
     reconnectionDelay: 1000,
     timeout: 10000,
     auth: { token },
-    extraHeaders: {
-      origin: serverUrl.replace(/^(https?:\/\/[^/]+).*/, '$1'),
-    },
   });
 
   return socket;

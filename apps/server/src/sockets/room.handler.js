@@ -2,8 +2,6 @@ import { markRoomActivity } from '../utils/roomActivity.js';
 import { verifyRoomAccess } from '../services/room.service.js';
 import { ensureAuthorizedRoom } from '../utils/guard.js';
 
-// In-memory brute-force guard for socket joins, keyed on client IP.
-// Mirrors the REST joinRateLimiter; resets on restart (acceptable, like other in-memory state).
 const JOIN_WINDOW_MS = 5 * 60 * 1000;
 const JOIN_MAX_ATTEMPTS = 20;
 const joinAttempts = new Map(); // ip -> { count, resetAt }

@@ -4,17 +4,6 @@ import { readFileSync, existsSync } from 'fs';
 
 let firebaseApp = null;
 
-/**
- * Initialize Firebase Admin SDK for file storage.
- *
- * Credentials are loaded in order of priority:
- *   1. FIREBASE_SERVICE_ACCOUNT_JSON  — env var containing the full JSON string
- *      (used on Render / production where the file isn't on disk)
- *   2. FIREBASE_SERVICE_ACCOUNT_PATH  — path to a .json file on disk
- *      (used in local development)
- *
- * Also requires FIREBASE_STORAGE_BUCKET to be set.
- */
 export function initFirebase() {
     if (firebaseApp || getApps().length > 0) {
         return;
@@ -38,11 +27,9 @@ export function initFirebase() {
         let serviceAccount;
 
         if (serviceAccountJson) {
-            // Production (Render): parse JSON trực tiếp từ biến môi trường
             serviceAccount = JSON.parse(serviceAccountJson);
             console.log('[Firebase] Using credentials from FIREBASE_SERVICE_ACCOUNT_JSON env var.');
         } else if (existsSync(serviceAccountPath)) {
-            // Local dev: đọc file từ disk
             serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf-8'));
             console.log('[Firebase] Using credentials from file:', serviceAccountPath);
         } else {
@@ -55,7 +42,6 @@ export function initFirebase() {
             storageBucket,
         });
 
-        // Autoconfigure CORS for the bucket so the frontend <canvas> can load images
         const bucket = getStorage().bucket();
         bucket.setCorsConfiguration([
             {
@@ -73,10 +59,6 @@ export function initFirebase() {
     }
 }
 
-/**
- * Get the Firebase Storage bucket instance.
- * Returns null if Firebase is not initialized.
- */
 export function getBucket() {
     if (!firebaseApp && getApps().length === 0) return null;
     try {

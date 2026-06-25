@@ -9,14 +9,8 @@ import { initializeSockets } from './sockets/index.js';
 import roomRoutes from './routes/room.routes.js';
 import fileRoutes from './routes/file.routes.js';
 
-// cors configuration - allow localhost and any origins specified in .env
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(',').map(o => o.trim());
 
-// A request is allowed when it has no Origin (non-browser client), an opaque
-// "null" origin (packaged Electron desktop app loaded from file://), a
-// localhost origin, or an origin explicitly listed in ALLOWED_ORIGINS. Socket
-// and REST access are still gated by the JWT auth middleware, so this only
-// governs which browsers/clients may talk to the API, not authorization.
 const isAllowedOrigin = (origin) =>
     !origin ||
     origin === 'null' ||

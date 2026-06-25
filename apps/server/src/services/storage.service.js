@@ -1,9 +1,6 @@
 import { getBucket } from '../config/firebase.js';
 import { randomUUID } from 'crypto';
 
-// Canonical extension per allowed MIME type. The extension is derived from the
-// (multer-validated) mimetype rather than the client-supplied filename, which
-// avoids object-name injection via crafted originalnames (e.g. "x/../../y").
 const EXT_BY_MIME = {
     'image/png': 'png',
     'image/jpeg': 'jpg',
@@ -18,13 +15,6 @@ function httpError(message, statusCode) {
     return error;
 }
 
-/**
- * Upload a room file to Firebase Storage and return its public URL.
- * Throws errors carrying a `statusCode` for the controller to map.
- *
- * @param {{ roomId: string, file: { buffer: Buffer, mimetype: string, originalname: string } }} args
- * @returns {Promise<{ fileId: string, url: string, originalName: string }>}
- */
 export async function uploadRoomFile({ roomId, file }) {
     const bucket = getBucket();
     if (!bucket) {

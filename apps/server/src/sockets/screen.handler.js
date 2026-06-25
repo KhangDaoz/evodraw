@@ -2,7 +2,6 @@ import { markRoomActivity } from '../utils/roomActivity.js';
 import { ensureAuthorizedRoom } from '../utils/guard.js';
 
 // Presenter starts sharing
-// Expected payload: { roomId: string, shareId: string, displaySurface?: string }
 const handleScreenStart = (io, socket) => ({ roomId, shareId, displaySurface }) => {
     if (!roomId || !shareId) return;
     try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
@@ -25,7 +24,6 @@ const handleScreenStart = (io, socket) => ({ roomId, shareId, displaySurface }) 
 };
 
 // Presenter stops sharing
-// Expected payload: { roomId: string, shareId: string }
 const handleScreenStop = (io, socket) => ({ roomId, shareId }) => {
     if (!roomId || !shareId) return;
     try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }

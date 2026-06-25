@@ -22,11 +22,6 @@ const roomSchema = new mongoose.Schema(
             type: Array,
             default: [],
         },
-        // (theme, zoom...)
-        appState: {
-            type: Object,
-            default: {},
-        },
         status: {
             type: String,
             default: 'active',

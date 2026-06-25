@@ -2,11 +2,8 @@ import { markRoomActivity } from '../utils/roomActivity.js';
 import { getRoom, updateRoomService } from '../services/room.service.js';
 import { ensureAuthorizedRoom } from '../utils/guard.js';
 
-// Payload bounds to prevent memory/bandwidth DoS and runaway document growth.
 const MAX_SNAPSHOT_ELEMENTS = 100_000;
-const MAX_OP_BYTES = 1_000_000; // ~1 MB serialized per single canvas op
-
-// ─── Handler Functions ────────────────────────────────────────────────────────
+const MAX_OP_BYTES = 1_000_000;
 
 // draw event payload: { roomId, stroke: { id, type, points, color, width, ... } }
 function onDrawStroke(socket, payload) {
@@ -23,10 +20,8 @@ function onCursorMove(socket, payload) {
 }
 
 // Canvas operation relay (object:added, object:modified, object:removed)
-// Expected payload: { roomId: string, op: { type, id?, object? } }
 function onCanvasOp(socket, payload) {
     try { ensureAuthorizedRoom(socket, payload.roomId); } catch (e) { return; }
-    // Drop oversized ops rather than fanning them out to every peer.
     if (JSON.stringify(payload.op || null).length > MAX_OP_BYTES) {
         console.warn(`[CanvasOp] Dropped oversized op for room ${payload.roomId}`);
         return;
@@ -36,7 +31,6 @@ function onCanvasOp(socket, payload) {
 }
 
 // Canvas background color sync
-// Expected payload: { roomId: string, bgColor: string, bgId?: string }
 function onCanvasBgChange(socket, payload) {
     if (!payload?.roomId || !payload?.bgColor) return;
     try { ensureAuthorizedRoom(socket, payload.roomId); } catch (e) { return; }
@@ -93,17 +87,10 @@ function onCanvasStateRequest(socket, { roomId }) {
 function onCanvasStateResponse(io, socket, { requesterId, snapshot }) {
     const roomId = socket.data.auth?.roomId;
     if (!roomId) return;
-    // Forward only to a requester whose TOKEN authorizes the same room. We check
-    // the token (set synchronously at connection) rather than room membership,
-    // because joinRoom is async (awaits bcrypt) and the requester may not have
-    // finished joining when this fast peer response arrives — checking membership
-    // would drop the late joiner's state. This still blocks cross-room spoofing.
     const requester = io.sockets.sockets.get(requesterId);
     if (!requester || requester.data.auth?.roomId !== roomId) return;
     io.to(requesterId).emit('canvas_state_init', { snapshot });
 }
-
-// ─── Register Handlers ────────────────────────────────────────────────────────
 
 export const registerDrawHandlers = (io, socket) => {
     socket.on('draw_stroke',           (payload) => onDrawStroke(socket, payload));

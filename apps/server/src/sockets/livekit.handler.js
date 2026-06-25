@@ -1,10 +1,6 @@
 import { AccessToken } from 'livekit-server-sdk';
 import { ensureAuthorizedRoom } from '../utils/guard.js';
 
-// LiveKit Token Generator
-// Shared by voice chat (useVoiceChat) and screen share (useScreenShare) on the
-// web client: both reuse a single LiveKit Room created from this one token.
-// Clients request a JWT to connect to the LiveKit SFU for voice/video/screen tracks.
 const handleGetToken = (io, socket) => async ({ roomId, username }, callback) => {
     try {
         try { ensureAuthorizedRoom(socket, roomId); } catch (e) {
@@ -22,8 +18,6 @@ const handleGetToken = (io, socket) => async ({ roomId, username }, callback) =>
             return;
         }
 
-        // Identity must be unique per participant in a room.
-        // Append a short socket-id suffix to handle duplicate usernames.
         const identity = `${username || 'Anonymous'}-${socket.id.slice(-4)}`;
 
         const token = new AccessToken(apiKey, apiSecret, {

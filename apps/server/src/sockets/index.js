@@ -4,6 +4,32 @@ import { registerChatHandlers } from './chat.handler.js';
 import { registerLiveKitHandlers } from './livekit.handler.js';
 import { registerScreenShareHandlers } from './screen.handler.js';
 import { verifyToken } from '../services/token.service.js';
+import { flushAllDirty, startRoomDocLoop, stopRoomDocLoop } from '../services/roomDocument.js';
+
+const AUTHORITATIVE = process.env.AUTHORITATIVE_SYNC !== 'false';
+
+let shuttingDown = false;
+
+// On deploy/restart (Render sends SIGTERM), persist any unsaved room documents
+// before exiting so in-memory edits aren't lost.
+function registerGracefulShutdown() {
+    const shutdown = async (signal) => {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        console.log(`[Sync] ${signal} received — flushing room documents...`);
+        try {
+            stopRoomDocLoop();
+            await flushAllDirty();
+            console.log('[Sync] Flush complete.');
+        } catch (err) {
+            console.error('[Sync] Flush on shutdown failed:', err.message);
+        } finally {
+            process.exit(0);
+        }
+    };
+    process.once('SIGTERM', () => shutdown('SIGTERM'));
+    process.once('SIGINT', () => shutdown('SIGINT'));
+}
 
 export const initializeSockets = (io) => {
     console.log('Socket.IO initialized globally');
@@ -40,4 +66,9 @@ export const initializeSockets = (io) => {
             console.log(`Client disconnected: ${socket.id}`);
         });
     });
+
+    if (AUTHORITATIVE) {
+        startRoomDocLoop();
+        registerGracefulShutdown();
+    }
 };

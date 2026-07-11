@@ -1,0 +1,207 @@
+import { shouldAcceptRemote, getEvoId } from '../utils/lww.js';
+import { loadRoomDoc, persistRoomDoc, TOMBSTONE_TTL_MS } from './room.service.js';
+
+// ─── Authoritative in-memory canvas document (Backend Tier 1) ────────────────
+//
+// One entry per active room. The server owns the canonical set of persistent
+// elements and resolves every incoming op with the same LWW rule the clients use
+// (utils/lww.js), so a lagging client can no longer resurrect a deleted object or
+// clobber the room with a stale full-snapshot push.
+//
+// SINGLE-INSTANCE: this Map lives in one process. Horizontal scaling (Tier 2)
+// must move room ownership into Redis or pin a room to one instance first.
+
+const FLUSH_INTERVAL_MS = Number(process.env.ROOMDOC_FLUSH_INTERVAL_MS || 10_000);
+const MAX_DOC_ELEMENTS = 100_000; // mirror MAX_SNAPSHOT_ELEMENTS bound
+
+/** @typedef {{ elements: Map<string, object>, tombstones: Map<string, number>, seq: number, dirty: boolean, hydrating: Promise<void>|null }} RoomDoc */
+
+/** @type {Map<string, RoomDoc>} */
+const rooms = new Map();
+
+const normalize = (code) => String(code || '').trim().toUpperCase();
+
+function pruneDocTombstones(doc, now = Date.now()) {
+    const cutoff = now - TOMBSTONE_TTL_MS;
+    for (const [id, deletedAt] of doc.tombstones) {
+        if (deletedAt <= cutoff) doc.tombstones.delete(id);
+    }
+}
+
+/**
+ * Get (and lazily hydrate) the in-memory document for a room. Concurrent callers
+ * during hydration share the same single-flight promise, so a burst of joins
+ * can't produce two half-loaded docs.
+ * @returns {Promise<RoomDoc>}
+ */
+export async function getRoomDoc(code) {
+    const key = normalize(code);
+    let doc = rooms.get(key);
+
+    if (doc) {
+        if (doc.hydrating) await doc.hydrating;
+        pruneDocTombstones(doc);
+        return doc;
+    }
+
+    doc = { elements: new Map(), tombstones: new Map(), seq: 0, dirty: false, hydrating: null };
+    rooms.set(key, doc);
+
+    // Assigned synchronously (the async IIFE only yields at its first await, which
+    // is inside loadRoomDoc), so a concurrent caller always sees `hydrating` set.
+    doc.hydrating = (async () => {
+        try {
+            const loaded = await loadRoomDoc(key);
+            if (loaded) {
+                for (const el of loaded.elements) {
+                    const id = getEvoId(el);
+                    if (id) doc.elements.set(id, el);
+                }
+                for (const t of loaded.tombstones) {
+                    if (t && typeof t.id === 'string' && typeof t.deletedAt === 'number') {
+                        doc.tombstones.set(t.id, t.deletedAt);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error(`[RoomDoc] Hydration failed for ${key}:`, err.message);
+        } finally {
+            doc.hydrating = null;
+        }
+    })();
+
+    await doc.hydrating;
+    pruneDocTombstones(doc);
+    return doc;
+}
+
+/**
+ * Apply one canvas op to the authoritative document.
+ * @returns {Promise<{ accepted: boolean, seq: number, broadcastOp?: object, correction?: object }>}
+ *   - accepted + broadcastOp: relay this op (the winner) to the other peers.
+ *   - correction: the op lost LWW; send this authoritative state back to the sender.
+ */
+export async function applyOp(code, op) {
+    if (!op || typeof op.type !== 'string') return { accepted: false, seq: 0 };
+    const doc = await getRoomDoc(code);
+    const now = Date.now();
+
+    switch (op.type) {
+        case 'object:added':
+        case 'object:modified': {
+            const obj = op.object;
+            if (!obj) return { accepted: false, seq: doc.seq };
+
+            // Screen-share rects are ephemeral (never persisted): relay only.
+            if (obj._evoScreenShare) {
+                doc.seq += 1;
+                return { accepted: true, seq: doc.seq, broadcastOp: op };
+            }
+
+            const id = getEvoId(obj) || (typeof op.id === 'string' ? op.id : null);
+            if (!id) return { accepted: false, seq: doc.seq };
+
+            // Dead object — refuse resurrection.
+            if (doc.tombstones.has(id)) return { accepted: false, seq: doc.seq };
+
+            const existing = doc.elements.get(id) || null;
+
+            // Bound total live elements to prevent memory-exhaustion via new ids.
+            if (!existing && doc.elements.size >= MAX_DOC_ELEMENTS) {
+                console.warn(`[RoomDoc] Element cap reached for ${normalize(code)} — dropping new object`);
+                return { accepted: false, seq: doc.seq };
+            }
+
+            if (shouldAcceptRemote(existing, obj)) {
+                doc.elements.set(id, obj);
+                doc.dirty = true;
+                doc.seq += 1;
+                return { accepted: true, seq: doc.seq, broadcastOp: op };
+            }
+
+            // Loser: hand the sender the authoritative state so it converges.
+            return {
+                accepted: false,
+                seq: doc.seq,
+                correction: { type: 'object:modified', id, object: existing },
+            };
+        }
+
+        case 'object:removed': {
+            const id = typeof op.id === 'string' ? op.id : getEvoId(op.object);
+            if (!id) return { accepted: false, seq: doc.seq };
+
+            doc.tombstones.set(id, now);
+            const had = doc.elements.delete(id);
+            if (had) doc.dirty = true; // ephemeral (e.g. screen-share) removals needn't persist
+            doc.seq += 1;
+            return { accepted: true, seq: doc.seq, broadcastOp: { type: 'object:removed', id } };
+        }
+
+        default:
+            return { accepted: false, seq: doc.seq };
+    }
+}
+
+/** Full authoritative state for a late joiner / resync. */
+export async function getSnapshot(code) {
+    const doc = await getRoomDoc(code);
+    return { elements: Array.from(doc.elements.values()), seq: doc.seq };
+}
+
+/** Persist a room's document if it has unsaved changes. */
+export async function flushRoom(code) {
+    const key = normalize(code);
+    const doc = rooms.get(key);
+    if (!doc || !doc.dirty) return;
+    if (doc.hydrating) await doc.hydrating;
+
+    const elements = Array.from(doc.elements.values());
+    const tombstones = Array.from(doc.tombstones, ([id, deletedAt]) => ({ id, deletedAt }));
+
+    try {
+        await persistRoomDoc({ code: key, elements, tombstones });
+        doc.dirty = false;
+    } catch (err) {
+        if (err.statusCode === 404) {
+            // Room was TTL-deleted from the DB — drop the orphaned in-memory doc.
+            rooms.delete(key);
+            return;
+        }
+        console.error(`[RoomDoc] Flush failed for ${key}:`, err.message);
+    }
+}
+
+/** Flush then drop a room from memory (call when the room empties). */
+export async function evictRoom(code) {
+    const key = normalize(code);
+    if (!rooms.has(key)) return;
+    await flushRoom(key);
+    rooms.delete(key);
+}
+
+/** Flush every dirty room (periodic tick + graceful shutdown). */
+export async function flushAllDirty() {
+    const keys = Array.from(rooms.keys());
+    await Promise.allSettled(keys.map((k) => flushRoom(k)));
+}
+
+let flushTimer = null;
+
+/** Start the periodic flush + tombstone-sweep loop. Idempotent. */
+export function startRoomDocLoop() {
+    if (flushTimer) return;
+    flushTimer = setInterval(() => {
+        flushAllDirty().catch((e) => console.error('[RoomDoc] periodic flush error:', e.message));
+        const now = Date.now();
+        for (const doc of rooms.values()) pruneDocTombstones(doc, now);
+    }, FLUSH_INTERVAL_MS);
+    if (typeof flushTimer.unref === 'function') flushTimer.unref();
+}
+
+export function stopRoomDocLoop() {
+    if (flushTimer) {
+        clearInterval(flushTimer);
+        flushTimer = null;
+    }
+}

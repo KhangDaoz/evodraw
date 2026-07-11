@@ -1,10 +1,15 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
 import { getRoom, updateRoomService } from '../services/room.service.js';
 import { ensureAuthorizedRoom } from '../utils/guard.js';
+import { applyOp, getSnapshot } from '../services/roomDocument.js';
 
 // Payload bounds to prevent memory/bandwidth DoS and runaway document growth.
 const MAX_SNAPSHOT_ELEMENTS = 100_000;
 const MAX_OP_BYTES = 1_000_000; // ~1 MB serialized per single canvas op
+
+// Authoritative-server sync (Backend Tier 1). Set AUTHORITATIVE_SYNC=false to fall
+// back to the legacy pure-relay + client-snapshot behavior if a regression appears.
+const AUTHORITATIVE = process.env.AUTHORITATIVE_SYNC !== 'false';
 
 // ─── Handler Functions ────────────────────────────────────────────────────────
 
@@ -22,16 +27,42 @@ function onCursorMove(socket, payload) {
     markRoomActivity(payload?.roomId);
 }
 
-// Canvas operation relay (object:added, object:modified, object:removed)
+// Canvas operation relay (object:added, object:modified, object:removed).
 // Expected payload: { roomId: string, op: { type, id?, object? } }
-function onCanvasOp(socket, payload) {
+// Authoritative mode: the server applies LWW + tombstones and relays only the
+// winning op; the loser gets the authoritative state back so it converges.
+async function onCanvasOp(socket, payload) {
     try { ensureAuthorizedRoom(socket, payload.roomId); } catch (e) { return; }
+
     // Drop oversized ops rather than fanning them out to every peer.
     if (JSON.stringify(payload.op || null).length > MAX_OP_BYTES) {
         console.warn(`[CanvasOp] Dropped oversized op for room ${payload.roomId}`);
         return;
     }
-    socket.to(payload.roomId).emit('canvas_op_received', { op: payload.op });
+
+    if (!AUTHORITATIVE) {
+        // Legacy pure-relay behavior (kill-switch fallback).
+        socket.to(payload.roomId).emit('canvas_op_received', { op: payload.op });
+        markRoomActivity(payload?.roomId);
+        return;
+    }
+
+    try {
+        const result = await applyOp(payload.roomId, payload.op);
+        if (result.accepted && result.broadcastOp) {
+            socket.to(payload.roomId).emit('canvas_op_received', { op: result.broadcastOp, seq: result.seq });
+        } else if (result.correction && result.correction.object) {
+            // Sender's edit lost LWW (or targeted a newer object) — send the
+            // authoritative state back so the sender reconciles to it.
+            socket.emit('canvas_op_received', { op: result.correction, seq: result.seq });
+        }
+        // Rejected with no correction (tombstoned / capped) → silently dropped.
+    } catch (err) {
+        console.error(`[CanvasOp] apply failed for room ${payload.roomId}:`, err.message);
+        // Fail open: relay the raw op so an internal error doesn't lose the edit.
+        socket.to(payload.roomId).emit('canvas_op_received', { op: payload.op });
+    }
+
     markRoomActivity(payload?.roomId);
 }
 
@@ -45,41 +76,57 @@ function onCanvasBgChange(socket, payload) {
     markRoomActivity(payload?.roomId);
 }
 
-// Client pushes a full canvas snapshot for server-side persistence
+// Client pushes a full canvas snapshot.
+// DEPRECATED in authoritative mode: the server owns persistence (see roomDocument),
+// so a client snapshot can no longer clobber state — it's treated as an activity
+// ping only. Still registered for wire compatibility with unchanged clients.
+// In kill-switch (legacy) mode it performs the old client-authoritative save.
 async function onSaveSnapshot(socket, { roomId, elements, sceneVersion }) {
-    if (!roomId || !Array.isArray(elements) || typeof sceneVersion !== 'number') return;
+    if (!roomId) return;
+    try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
+
+    if (AUTHORITATIVE) {
+        markRoomActivity(roomId);
+        return;
+    }
+
+    // Legacy client-authoritative persistence (kill-switch fallback).
+    if (!Array.isArray(elements) || typeof sceneVersion !== 'number') return;
     if (elements.length > MAX_SNAPSHOT_ELEMENTS) {
         console.warn(`[Snapshot] Rejected oversized snapshot (${elements.length} elements) for room ${roomId}`);
         return;
     }
-    try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
     try {
-        await updateRoomService({
-            code: roomId,
-            roomVersion: sceneVersion,
-            elements,
-        });
+        await updateRoomService({ code: roomId, roomVersion: sceneVersion, elements });
         markRoomActivity(roomId);
     } catch (err) {
         console.error(`[Snapshot] Failed to save for room ${roomId}:`, err.message);
     }
 }
 
-// Client requests current snapshot of room from server DB
+// Client requests the current snapshot of the room.
+// Authoritative mode serves fresh in-memory state; legacy mode reads the DB.
 async function onRequestSnapshot(io, socket, { roomId }) {
     if (!roomId) return;
     try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
     try {
-        const room = await getRoom({ code: roomId, skipPasscodeCheck: true });
-        if (room) {
-            socket.emit('snapshot_loaded', {
-                elements: Array.isArray(room.elements) ? room.elements : [],
-                sceneVersion: typeof room.roomVersion === 'number' ? room.roomVersion : 0,
-            });
+        if (AUTHORITATIVE) {
+            const { elements, seq } = await getSnapshot(roomId);
+            socket.emit('snapshot_loaded', { elements, sceneVersion: seq });
+        } else {
+            const room = await getRoom({ code: roomId, skipPasscodeCheck: true });
+            if (room) {
+                socket.emit('snapshot_loaded', {
+                    elements: Array.isArray(room.elements) ? room.elements : [],
+                    sceneVersion: typeof room.roomVersion === 'number' ? room.roomVersion : 0,
+                });
+            }
         }
     } catch (err) {
         console.error(`[Snapshot] Failed to load for room ${roomId}:`, err.message);
     }
+    // Still ask peers for live-only extras (screen-share rects, bg color) that
+    // never enter the persistent document.
     socket.to(roomId).emit('canvas_state_request', { requesterId: socket.id });
 }
 

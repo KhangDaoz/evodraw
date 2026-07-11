@@ -1,6 +1,7 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
 import { verifyRoomAccess } from '../services/room.service.js';
 import { ensureAuthorizedRoom } from '../utils/guard.js';
+import { evictRoom } from '../services/roomDocument.js';
 
 // In-memory brute-force guard for socket joins, keyed on client IP.
 // Mirrors the REST joinRateLimiter; resets on restart (acceptable, like other in-memory state).
@@ -66,6 +67,20 @@ function leaveRoom(io, socket, { roomId, username }) {
 
     socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
     broadcastRoomUsers(io, roomId);
+    evictIfEmpty(io, roomId);
+}
+
+// Flush + drop the in-memory authoritative document once a room has no sockets
+// left. Runs after the socket has already left/disconnected, so fetchSockets
+// reflects the post-departure membership.
+async function evictIfEmpty(io, roomId) {
+    if (!roomId) return;
+    try {
+        const sockets = await io.in(roomId).fetchSockets();
+        if (sockets.length === 0) await evictRoom(roomId);
+    } catch (err) {
+        console.error(`[Room] evictIfEmpty error for ${roomId}:`, err.message);
+    }
 }
 
 function updateUsername(io, socket, { roomId, newUsername }) {
@@ -113,6 +128,7 @@ function onDisconnect(io, socket) {
     if (roomId) {
         socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
         broadcastRoomUsers(io, roomId);
+        evictIfEmpty(io, roomId);
     }
 }
 

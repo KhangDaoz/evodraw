@@ -123,3 +123,62 @@ export async function updateRoomService({ code, elements, appState, status }) {
 	room.status = status !== undefined ? status : room.status;
 	await room.save();
 }
+
+// ── Authoritative-server persistence (Tier 1) ───────────────────────────────
+// A deleted id is remembered this long to block resurrection, then forgotten to
+// bound storage. A client offline longer than this would resync from scratch anyway.
+export const TOMBSTONE_TTL_MS = Number(process.env.TOMBSTONE_TTL_MS || 60 * 60 * 1000); // 1h
+export const MAX_TOMBSTONES = 5000;
+
+// Drop tombstones older than the TTL and cap the total, keeping the most recent.
+export function pruneTombstones(tombstones, now = Date.now()) {
+	const cutoff = now - TOMBSTONE_TTL_MS;
+	let kept = (tombstones || []).filter(
+		(t) => t && typeof t.deletedAt === 'number' && t.deletedAt > cutoff && typeof t.id === 'string',
+	);
+	if (kept.length > MAX_TOMBSTONES) {
+		kept = kept.sort((a, b) => b.deletedAt - a.deletedAt).slice(0, MAX_TOMBSTONES);
+	}
+	return kept;
+}
+
+// Read a room's persistent document for in-memory hydration. Returns plain
+// objects (lean) or null if the room doesn't exist. Does not touch activity/TTL.
+export async function loadRoomDoc(code) {
+	const normalizedCode = String(code || '').trim().toUpperCase();
+	if (!normalizedCode) return null;
+
+	const room = await Room.findOne({ code: normalizedCode }).lean();
+	if (!room) return null;
+
+	return {
+		elements: Array.isArray(room.elements) ? room.elements : [],
+		tombstones: Array.isArray(room.tombstones) ? room.tombstones : [],
+		roomVersion: typeof room.roomVersion === 'number' ? room.roomVersion : 0,
+	};
+}
+
+// Persist the authoritative in-memory document (server-owned). Replaces the old
+// client-pushed snapshot clobber. Prunes tombstones and bumps roomVersion.
+export async function persistRoomDoc({ code, elements, tombstones }) {
+	const normalizedCode = String(code || '').trim().toUpperCase();
+	if (!normalizedCode) {
+		const error = new Error('Invalid room code.');
+		error.statusCode = 400;
+		throw error;
+	}
+
+	const room = await Room.findOne({ code: normalizedCode });
+	if (!room) {
+		const error = new Error('Room not found.');
+		error.statusCode = 404;
+		throw error;
+	}
+
+	room.roomVersion = (room.roomVersion || 0) + 1;
+	if (elements !== undefined) room.elements = elements;
+	if (tombstones !== undefined) room.tombstones = pruneTombstones(tombstones);
+	await room.save();
+
+	return room.roomVersion;
+}

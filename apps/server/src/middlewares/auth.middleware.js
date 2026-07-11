@@ -10,7 +10,8 @@ export function validateToken(req, res, next) {
 
     try {
         const decoded = verifyToken(token);
-        req.roomId = decoded.roomId;
+        // Legacy wire key: accept `roomId` from tokens issued before the rename.
+        req.roomCode = decoded.roomCode ?? decoded.roomId;
         next();
     }
     catch (error) {

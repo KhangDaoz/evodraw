@@ -5,21 +5,21 @@ import {
   importBoard,
   serializeCanvas,
   getSceneVersion,
-} from '../utils/canvasSerializer'
+} from '../sync/canvasSerializer'
 
 /**
- * DocumentController hook — quản lý Export/Import bảng trắng.
+ * DocumentController hook — manages whiteboard export/import.
  *
  * @param {fabric.Canvas} fabricCanvas - Fabric canvas instance
  * @param {React.MutableRefObject} syncState - { _applying: boolean }
- * @param {string} roomId - mã phòng hiện tại
+ * @param {string} roomCode - current room code
  */
-export default function useDocumentManager(fabricCanvas, syncState, roomId) {
+export default function useDocumentManager(fabricCanvas, syncState, roomCode) {
 
   /**
-   * Luồng Export (theo sơ đồ tuần tự):
+   * Export flow:
    * SettingsPanel → handleExport → exportBoard (serialize CanvasElement)
-   *               → trigger browser download file .json
+   *               → trigger browser download of the .json file
    */
   const handleExport = useCallback(() => {
     if (!fabricCanvas) return
@@ -30,18 +30,18 @@ export default function useDocumentManager(fabricCanvas, syncState, roomId) {
 
     const a = document.createElement('a')
     a.href = url
-    a.download = `evodraw-${roomId || 'board'}-${Date.now()}.json`
+    a.download = `evodraw-${roomCode || 'board'}-${Date.now()}.json`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  }, [fabricCanvas, roomId])
+  }, [fabricCanvas, roomCode])
 
   /**
-   * Luồng Import (theo sơ đồ tuần tự):
-   * SettingsPanel → handleImport → đọc file
+   * Import flow:
+   * SettingsPanel → handleImport → read file
    *               → importBoard (deserialize CanvasElement → Canvas render)
-   *               → emit sync cho các thành viên khác qua Socket.IO
+   *               → emit sync to the other members over Socket.IO
    */
   const handleImport = useCallback((file) => {
     if (!fabricCanvas || !file) return
@@ -52,21 +52,21 @@ export default function useDocumentManager(fabricCanvas, syncState, roomId) {
         const jsonString = e.target.result
         await importBoard(fabricCanvas, jsonString, syncState.current)
 
-        // ── Đồng bộ cho peers sau khi import ──
+        // ── Sync to peers after import ──
         const socket = getSocket()
-        if (socket && roomId) {
+        if (socket && roomCode) {
           const { objects } = serializeCanvas(fabricCanvas)
           const sceneVersion = getSceneVersion(fabricCanvas)
           socket.emit('save_snapshot', {
-            roomId,
+            roomCode,
             elements: objects,
             sceneVersion,
           })
 
-          // Emit từng element dưới dạng canvas_op để peers nhận realtime
+          // Emit each element as a canvas_op so peers receive it in realtime
           for (const obj of objects) {
             socket.emit('canvas_op', {
-              roomId,
+              roomCode,
               op: { type: 'object:added', object: obj },
             })
           }
@@ -77,7 +77,7 @@ export default function useDocumentManager(fabricCanvas, syncState, roomId) {
       }
     }
     reader.readAsText(file)
-  }, [fabricCanvas, syncState, roomId])
+  }, [fabricCanvas, syncState, roomCode])
 
   return { handleExport, handleImport }
 }

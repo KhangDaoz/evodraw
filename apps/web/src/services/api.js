@@ -43,7 +43,7 @@ export async function joinRoom(code, passcode) {
  * Upload a file (image, etc.) to Firebase Storage via the server.
  * Returns { success: true, data: { fileId, url, originalName } }
  */
-export async function uploadFile(roomId, file) {
+export async function uploadFile(roomCode, file) {
   const formData = new FormData()
   formData.append('file', file)
 
@@ -53,7 +53,7 @@ export async function uploadFile(roomId, file) {
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(`${BASE_URL}/rooms/${roomId}/files`, {
+  const res = await fetch(`${BASE_URL}/rooms/${roomCode}/files`, {
     method: 'POST',
     headers,
     body: formData,

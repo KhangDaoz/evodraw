@@ -1,6 +1,6 @@
 import Room from '../models/Room.js';
 import bcrypt from 'bcrypt';
-import { generateRoomCode, generateRoomPassCode } from '../utils/codeGenerator.js';
+import { generateRoomCode, generateRoomPasscode } from '../utils/codeGenerator.js';
 
 export async function createRoomService() {
 	let code = generateRoomCode();
@@ -23,7 +23,7 @@ export async function createRoomService() {
 		throw error;
 	}
 
-	const passcode = generateRoomPassCode();
+	const passcode = generateRoomPasscode();
 	const hashedPasscode = await bcrypt.hash(passcode, 10);
 
 	const room = await Room.create({

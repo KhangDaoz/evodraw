@@ -11,11 +11,11 @@ import { getSocket } from '../services/socket'
  * Username is locked at room-join time and never changes mid-session,
  * so it is safe to include in the effect deps without risk of disconnect.
  *
- * @param {string} roomId  - EvoDraw room code
+ * @param {string} roomCode  - EvoDraw room code
  * @param {string} username - Current user's display name (fixed for session)
  * @returns {{ room: Room, isLiveKitConnected: boolean }}
  */
-export default function useLiveKitRoom(roomId, username) {
+export default function useLiveKitRoom(roomCode, username) {
   const [room] = useState(() => new Room({
     adaptiveStream: true,
     dynacast: true,
@@ -24,7 +24,7 @@ export default function useLiveKitRoom(roomId, username) {
 
   useEffect(() => {
     const socket = getSocket()
-    if (!socket || !roomId || !username) return
+    if (!socket || !roomCode || !username) return
 
     let cancelled = false
 
@@ -36,7 +36,7 @@ export default function useLiveKitRoom(roomId, username) {
     }
 
     const connectToRoom = () => {
-      socket.emit('livekit:get-token', { roomId, username }, async (response) => {
+      socket.emit('livekit:get-token', { roomCode, username }, async (response) => {
         if (cancelled) return
         if (response?.error) {
           console.error('[LiveKit] Token error:', response.error)
@@ -80,7 +80,7 @@ export default function useLiveKitRoom(roomId, username) {
       room.disconnect()
       setIsLiveKitConnected(false)
     }
-  }, [room, roomId, username])
+  }, [room, roomCode, username])
 
   return { room, isLiveKitConnected }
 }

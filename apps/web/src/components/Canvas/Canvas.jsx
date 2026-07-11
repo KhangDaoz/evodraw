@@ -8,14 +8,14 @@ import useImagePasting from '../../hooks/useImagePasting'
 import { useRef, useImperativeHandle, forwardRef } from 'react'
 import './Canvas.css'
 
-const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle, roomId, username, isConnected, canvasBgColor, canvasBgId, onBgColorChange, syncState: externalSyncState }, ref) => {
+const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle, roomCode, username, isConnected, canvasBgColor, canvasBgId, onBgColorChange, syncState: externalSyncState }, ref) => {
   const { fabricCanvas, containerRef, canvasRef } = useInfiniteCanvas(activeTool)
   const internalSyncState = useRef({ _applying: false })
   const syncState = externalSyncState || internalSyncState
   const screenShareLayerRef = useRef(null)
 
   // Real-time sync: serialize canvas ops ↔ socket
-  useCanvasSync(fabricCanvas, syncState, roomId, isConnected, canvasBgColor, canvasBgId, onBgColorChange)
+  useCanvasSync(fabricCanvas, syncState, roomCode, isConnected, canvasBgColor, canvasBgId, onBgColorChange)
 
   // Undo/Redo tracking
   const { undo, redo } = useHistory(fabricCanvas, syncState)
@@ -28,7 +28,7 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
   }))
 
   // Image pasting support
-  useImagePasting(fabricCanvas, containerRef, roomId)
+  useImagePasting(fabricCanvas, containerRef, roomCode)
 
   // Tool handling: pen, eraser, shapes, lines, arrows, text
   useDrawingTools(
@@ -43,7 +43,7 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
 
   // Remote cursor sync + coordinate conversion
   const { remoteCursors, sceneToScreen, viewportVersion, getCursorColor } =
-    useRemoteCursors(fabricCanvas, roomId, username, isConnected)
+    useRemoteCursors(fabricCanvas, roomCode, username, isConnected)
 
   return (
     <div className="evodraw-canvas-area" ref={containerRef} onContextMenu={(e) => e.preventDefault()}>

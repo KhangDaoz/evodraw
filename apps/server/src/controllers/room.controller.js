@@ -53,9 +53,9 @@ export async function joinRoom(req, res) {
 export async function updateRoom(req, res) {
     try {
         const { roomVersion, elements, appState, status } = req.body || {};
-        // Use roomId from the verified token instead of the request body
-        const code = req.roomId;
-        await updateRoomService({ code, roomVersion, elements, appState, status });
+        // Use the room code from the verified token instead of the request body
+        const roomCode = req.roomCode;
+        await updateRoomService({ code: roomCode, roomVersion, elements, appState, status });
 
         res.status(200).json({
             success: true,

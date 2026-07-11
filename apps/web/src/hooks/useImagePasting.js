@@ -6,9 +6,9 @@ import { uploadFile } from '../services/api';
  * Handles pasting images from clipboard into the canvas.
  * Uploads the image to the server (Firebase Storage), then adds it to the canvas.
  */
-export default function useImagePasting(fabricCanvas, containerRef, roomId) {
+export default function useImagePasting(fabricCanvas, containerRef, roomCode) {
   useEffect(() => {
-    if (!fabricCanvas || !roomId || !containerRef.current) return;
+    if (!fabricCanvas || !roomCode || !containerRef.current) return;
 
     // Track the last known mouse position on the canvas
     let lastScenePoint = null;
@@ -66,7 +66,7 @@ export default function useImagePasting(fabricCanvas, containerRef, roomId) {
 
       try {
         console.log('[Image Paste] Uploading image...', imageFile.name);
-        const result = await uploadFile(roomId, imageFile);
+        const result = await uploadFile(roomCode, imageFile);
         
         if (result.success && result.data.url) {
           const imgUrl = result.data.url;
@@ -95,5 +95,5 @@ export default function useImagePasting(fabricCanvas, containerRef, roomId) {
       window.removeEventListener('paste', handlePaste);
       fabricCanvas.off('mouse:move', onMouseMove);
     };
-  }, [fabricCanvas, roomId, containerRef]);
+  }, [fabricCanvas, roomCode, containerRef]);
 }

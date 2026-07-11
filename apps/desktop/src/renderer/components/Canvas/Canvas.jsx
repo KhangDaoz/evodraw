@@ -17,7 +17,7 @@ const Canvas = forwardRef(({
   isDrawingActive = true,
   mode = 'working',
   onCanvasReady,
-  roomId,
+  roomCode,
   isConnected,
   onUserViewport,
 }, ref) => {
@@ -27,7 +27,7 @@ const Canvas = forwardRef(({
   // Join the shared room canvas: load snapshot, send/receive canvas_op, push
   // periodic snapshots. Desktop overlay is just another viewport onto the
   // same scene — no overlay-specific protocol.
-  useCanvasSync(fabricCanvas, syncState, roomId, isConnected, null, null, null)
+  useCanvasSync(fabricCanvas, syncState, roomCode, isConnected, null, null, null)
 
   const { undo, redo } = useHistory(fabricCanvas, syncState)
 

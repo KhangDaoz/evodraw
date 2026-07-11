@@ -22,10 +22,10 @@ function httpError(message, statusCode) {
  * Upload a room file to Firebase Storage and return its public URL.
  * Throws errors carrying a `statusCode` for the controller to map.
  *
- * @param {{ roomId: string, file: { buffer: Buffer, mimetype: string, originalname: string } }} args
+ * @param {{ roomCode: string, file: { buffer: Buffer, mimetype: string, originalname: string } }} args
  * @returns {Promise<{ fileId: string, url: string, originalName: string }>}
  */
-export async function uploadRoomFile({ roomId, file }) {
+export async function uploadRoomFile({ roomCode, file }) {
     const bucket = getBucket();
     if (!bucket) {
         throw httpError(
@@ -40,14 +40,14 @@ export async function uploadRoomFile({ roomId, file }) {
     }
 
     const fileId = randomUUID();
-    const storagePath = `rooms/${roomId}/${fileId}.${ext}`;
+    const storagePath = `rooms/${roomCode}/${fileId}.${ext}`;
 
     const bucketFile = bucket.file(storagePath);
     await bucketFile.save(file.buffer, {
         metadata: {
             contentType: file.mimetype,
             metadata: {
-                roomId,
+                roomCode,
                 originalName: file.originalname,
                 uploadedAt: new Date().toISOString(),
             },

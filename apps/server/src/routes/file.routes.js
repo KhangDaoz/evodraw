@@ -24,7 +24,7 @@ const upload = multer({
 
 // Ensure the caller's token authorizes the room in the URL before uploading.
 function ensureRoomMatches(req, res, next) {
-    if (req.roomId !== req.params.roomId) {
+    if (req.roomCode !== req.params.roomCode) {
         return res.status(403).json({ success: false, error: 'Token does not authorize this room.' });
     }
     next();
@@ -32,7 +32,7 @@ function ensureRoomMatches(req, res, next) {
 
 const router = Router({ mergeParams: true });
 
-// POST /api/rooms/:roomId/files — upload a file (auth required)
+// POST /api/rooms/:roomCode/files — upload a file (auth required)
 router.post('/', validateToken, ensureRoomMatches, upload.single('file'), uploadFile);
 
 export default router;

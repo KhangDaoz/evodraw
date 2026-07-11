@@ -19,7 +19,7 @@ export default function useRoom(roomCode, currentUsername, passcode) {
 
     if (!hasJoined.current && roomCode && usernameRef.current) {
       const socket = getSocket()
-      socket.emit('join_room', { roomId: roomCode, username: usernameRef.current, passcode })
+      socket.emit('join_room', { roomCode, username: usernameRef.current, passcode })
       hasJoined.current = true
     }
   }, [roomCode, passcode])
@@ -67,7 +67,7 @@ export default function useRoom(roomCode, currentUsername, passcode) {
     usernameRef.current = newUsername
     const socket = getSocket()
     if (socket && isConnected) {
-      socket.emit('update_username', { roomId: roomCode, newUsername })
+      socket.emit('update_username', { roomCode, newUsername })
     }
   }, [roomCode, isConnected])
 
@@ -86,7 +86,7 @@ export default function useRoom(roomCode, currentUsername, passcode) {
 
     // If already connected when hook mounts
     if (socket.connected && !hasJoined.current) {
-      socket.emit('join_room', { roomId: roomCode, username: usernameRef.current, passcode })
+      socket.emit('join_room', { roomCode, username: usernameRef.current, passcode })
       hasJoined.current = true
       setIsConnected(true)
     }
@@ -94,7 +94,7 @@ export default function useRoom(roomCode, currentUsername, passcode) {
     return () => {
       const s = getSocket()
       if (s) {
-        s.emit('leave_room', { roomId: roomCode, username: usernameRef.current })
+        s.emit('leave_room', { roomCode, username: usernameRef.current })
         s.off('connect', handleConnect)
         s.off('disconnect', handleDisconnect)
         s.off('connect_error', handleConnectError)

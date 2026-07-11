@@ -2,22 +2,22 @@ import { uploadRoomFile } from '../services/storage.service.js';
 
 /**
  * Upload a file to Firebase Storage and return its public URL.
- * POST /api/rooms/:roomId/files
+ * POST /api/rooms/:roomCode/files
  */
 export async function uploadFile(req, res) {
     try {
-        const { roomId } = req.params;
+        const { roomCode } = req.params;
         const file = req.file;
 
         if (!file) {
             return res.status(400).json({ success: false, error: 'No file provided.' });
         }
 
-        if (!roomId) {
+        if (!roomCode) {
             return res.status(400).json({ success: false, error: 'Room ID is required.' });
         }
 
-        const data = await uploadRoomFile({ roomId, file });
+        const data = await uploadRoomFile({ roomCode, file });
 
         return res.status(201).json({ success: true, data });
     } catch (err) {

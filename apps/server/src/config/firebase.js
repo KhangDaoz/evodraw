@@ -38,11 +38,11 @@ export function initFirebase() {
         let serviceAccount;
 
         if (serviceAccountJson) {
-            // Production (Render): parse JSON trực tiếp từ biến môi trường
+            // Production (Render): parse the JSON string directly from the env var
             serviceAccount = JSON.parse(serviceAccountJson);
             console.log('[Firebase] Using credentials from FIREBASE_SERVICE_ACCOUNT_JSON env var.');
         } else if (existsSync(serviceAccountPath)) {
-            // Local dev: đọc file từ disk
+            // Local dev: read the credentials file from disk
             serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf-8'));
             console.log('[Firebase] Using credentials from file:', serviceAccountPath);
         } else {

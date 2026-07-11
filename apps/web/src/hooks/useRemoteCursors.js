@@ -36,7 +36,7 @@ const CURSOR_EMIT_MIN_DELTA = 1
  *
  * @returns {{ remoteCursors: Object, sceneToScreen: Function, viewportVersion: number, getCursorColor: Function }}
  */
-export default function useRemoteCursors(fabricCanvas, roomId, username, isConnected) {
+export default function useRemoteCursors(fabricCanvas, roomCode, username, isConnected) {
   const [remoteCursors, setRemoteCursors] = useState({})
   const [viewportVersion, setViewportVersion] = useState(0)
   const lastEmitRef = useRef(0)
@@ -53,7 +53,7 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
   // Listen for remote cursor updates
   useEffect(() => {
     const socket = getSocket()
-    if (!socket || !roomId || !isConnected) return
+    if (!socket || !roomCode || !isConnected) return
 
     // Animation loop: ease each displayed cursor toward its network target so
     // motion stays smooth at render rate even though positions arrive ~12/sec.
@@ -134,13 +134,13 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
         rafRef.current = null
       }
     }
-  }, [roomId, isConnected, username])
+  }, [roomCode, isConnected, username])
 
   const throttleTimeoutRef = useRef(null)
 
   // Emit own cursor position (throttled) on mouse move
   useEffect(() => {
-    if (!fabricCanvas || !roomId || !isConnected) return
+    if (!fabricCanvas || !roomCode || !isConnected) return
 
     const onMouseMove = (opt) => {
       const now = Date.now()
@@ -155,7 +155,7 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
       const emitMove = () => {
         const socket = getSocket()
         if (socket) {
-          socket.emit('cursor_move', { roomId, position: { x: pt.x, y: pt.y }, username })
+          socket.emit('cursor_move', { roomCode, position: { x: pt.x, y: pt.y }, username })
           lastEmitRef.current = Date.now()
           lastEmitPosRef.current = { x: pt.x, y: pt.y }
         }
@@ -181,7 +181,7 @@ export default function useRemoteCursors(fabricCanvas, roomId, username, isConne
       fabricCanvas.off('mouse:move', onMouseMove)
       if (throttleTimeoutRef.current) clearTimeout(throttleTimeoutRef.current)
     }
-  }, [fabricCanvas, roomId, isConnected, username])
+  }, [fabricCanvas, roomCode, isConnected, username])
 
   // Track viewport changes so cursor overlays re-render at correct positions
   useEffect(() => {

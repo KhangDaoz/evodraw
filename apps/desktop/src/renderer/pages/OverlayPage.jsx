@@ -9,9 +9,9 @@ import { getSocket } from '../services/socket'
 const SYNCING_TOOLS = new Set(['pen', 'eraser', 'select'])
 
 export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }) {
-  const { roomId, username: initialUsername, shareId, displaySurface, captureX, captureY } = roomInfo
+  const { roomCode, username: initialUsername, shareId, displaySurface, captureX, captureY } = roomInfo
   const isOverlayMode = !!shareId
-  console.log('[OverlayPage] mount', { roomId, shareId, isOverlayMode, screenSize })
+  console.log('[OverlayPage] mount', { roomCode, shareId, isOverlayMode, screenSize })
 
   const canvasRef = useRef(null)
   const [fabricCanvas, setFabricCanvas] = useState(null)
@@ -34,8 +34,8 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
 
   // Hooks
   const { isConnected, connectedUsers, error: roomError } =
-    useRoom(serverUrl, roomId, username)
-  const { messages, sendMessage } = useChat(roomId, username)
+    useRoom(serverUrl, roomCode, username)
+  const { messages, sendMessage } = useChat(roomCode, username)
 
   const onCanvasReady = useCallback((fc) => setFabricCanvas(fc), [])
 
@@ -59,8 +59,8 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
   useEffect(() => {
     if (!isConnected || !isOverlayMode || !shareId) return
     const socket = getSocket()
-    if (socket) socket.emit('overlay:ready', { roomId, shareId })
-  }, [isConnected, isOverlayMode, roomId, shareId])
+    if (socket) socket.emit('overlay:ready', { roomCode, shareId })
+  }, [isConnected, isOverlayMode, roomCode, shareId])
 
   // On mount: sync Electron window state with initial React mode
   useEffect(() => {
@@ -190,7 +190,7 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
         isDrawingActive={isDrawingActive}
         mode={mode}
         onCanvasReady={onCanvasReady}
-        roomId={roomId}
+        roomCode={roomCode}
         isConnected={isConnected}
         onUserViewport={handleUserViewport}
       />
@@ -264,7 +264,7 @@ export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }
         <span className="conn-dot" />
         <span className="conn-text">
           {isConnected
-            ? `${roomId} · ${connectedUsers.length + 1} online`
+            ? `${roomCode} · ${connectedUsers.length + 1} online`
             : roomError || 'Connecting…'}
         </span>
       </div>

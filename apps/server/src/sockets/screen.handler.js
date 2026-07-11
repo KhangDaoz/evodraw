@@ -1,22 +1,24 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
-import { ensureAuthorizedRoom } from '../utils/guard.js';
+import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 
 // Presenter starts sharing
-// Expected payload: { roomId: string, shareId: string, displaySurface?: string }
-const handleScreenStart = (io, socket) => ({ roomId, shareId, displaySurface }) => {
-    if (!roomId || !shareId) return;
-    try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
+// Expected payload: { roomCode: string, shareId: string, displaySurface?: string }
+const handleScreenStart = (io, socket) => (payload) => {
+    const roomCode = readRoomCode(payload);
+    const { shareId, displaySurface } = payload || {};
+    if (!roomCode || !shareId) return;
+    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
 
     const username = socket.data.username || 'Anonymous';
 
     if (!socket.data.shares) socket.data.shares = new Map();
     socket.data.shares.set(shareId, { displaySurface });
 
-    console.log(`[Screen] ${username} started sharing (${shareId}) in room ${roomId}`);
-    markRoomActivity(roomId);
+    console.log(`[Screen] ${username} started sharing (${shareId}) in room ${roomCode}`);
+    markRoomActivity(roomCode);
 
     // Notify all other users in the room
-    socket.to(roomId).emit('screen:started', {
+    socket.to(roomCode).emit('screen:started', {
         socketId: socket.id,
         shareId,
         username,
@@ -25,28 +27,31 @@ const handleScreenStart = (io, socket) => ({ roomId, shareId, displaySurface }) 
 };
 
 // Presenter stops sharing
-// Expected payload: { roomId: string, shareId: string }
-const handleScreenStop = (io, socket) => ({ roomId, shareId }) => {
-    if (!roomId || !shareId) return;
-    try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
+// Expected payload: { roomCode: string, shareId: string }
+const handleScreenStop = (io, socket) => (payload) => {
+    const roomCode = readRoomCode(payload);
+    const { shareId } = payload || {};
+    if (!roomCode || !shareId) return;
+    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
 
     if (socket.data.shares) {
         socket.data.shares.delete(shareId);
     }
 
-    console.log(`[Screen] Share stopped (${shareId}) in room ${roomId}`);
-    markRoomActivity(roomId);
+    console.log(`[Screen] Share stopped (${shareId}) in room ${roomCode}`);
+    markRoomActivity(roomCode);
 
-    socket.to(roomId).emit('screen:stopped', { shareId });
+    socket.to(roomCode).emit('screen:stopped', { shareId });
 };
 
 // Late joiner requests active shares list
-const handleGetActive = (io, socket) => async ({ roomId }) => {
-    if (!roomId) return;
-    try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
+const handleGetActive = (io, socket) => async (payload) => {
+    const roomCode = readRoomCode(payload);
+    if (!roomCode) return;
+    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
 
     try {
-        const sockets = await io.in(roomId).fetchSockets();
+        const sockets = await io.in(roomCode).fetchSockets();
         const list = [];
         for (const s of sockets) {
             if (s.data.shares && s.data.shares.size > 0) {
@@ -69,12 +74,12 @@ const handleGetActive = (io, socket) => async ({ roomId }) => {
 
 // Cleanup on disconnect: remove all shares from this socket
 const handleDisconnect = (io, socket) => () => {
-    const { roomId } = socket.data;
-    if (!roomId || !socket.data.shares || socket.data.shares.size === 0) return;
+    const { roomCode } = socket.data;
+    if (!roomCode || !socket.data.shares || socket.data.shares.size === 0) return;
 
     // Notify room about each stopped share
     for (const shareId of socket.data.shares.keys()) {
-        io.to(roomId).emit('screen:stopped', { shareId });
+        io.to(roomCode).emit('screen:stopped', { shareId });
         console.log(`[Screen] Auto-stopped share (${shareId}) on disconnect`);
     }
 

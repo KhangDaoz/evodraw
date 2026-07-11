@@ -1,6 +1,6 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
 import { verifyRoomAccess } from '../services/room.service.js';
-import { ensureAuthorizedRoom } from '../utils/guard.js';
+import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 import { evictRoom } from '../services/roomDocument.js';
 
 // In-memory brute-force guard for socket joins, keyed on client IP.
@@ -21,7 +21,8 @@ function isJoinBlocked(ip) {
 }
 
 async function joinRoom(io, socket, payload) {
-    const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : '';
+    const rawCode = readRoomCode(payload);
+    const roomCode = typeof rawCode === 'string' ? rawCode.trim() : '';
     const username = typeof payload?.username === 'string' ? payload.username.trim() : '';
     const passcode = typeof payload?.passcode === 'string' ? payload.passcode.trim() : '';
 
@@ -30,13 +31,13 @@ async function joinRoom(io, socket, payload) {
         return;
     }
 
-    if (!roomId || roomId.length !== 6 || !passcode || !/^\d{4}$/.test(passcode)) {
+    if (!roomCode || roomCode.length !== 6 || !passcode || !/^\d{4}$/.test(passcode)) {
         socket.emit('room_error', { message: 'Invalid room code or passcode format.' });
         return;
     }
 
     try {
-        if (!await verifyRoomAccess({ code: roomId, passcode })) {
+        if (!await verifyRoomAccess({ code: roomCode, passcode })) {
             socket.emit('room_error', { message: 'Invalid room code or passcode.' });
             return;
         }
@@ -46,95 +47,103 @@ async function joinRoom(io, socket, payload) {
         return;
     }
 
-    socket.join(roomId);
-    socket.data.roomId = roomId;
+    socket.join(roomCode);
+    socket.data.roomCode = roomCode;
     socket.data.username = username;
 
-    console.log(`User ${username} joined room ${roomId}`);
-    markRoomActivity(roomId, { force: true });
+    console.log(`User ${username} joined room ${roomCode}`);
+    markRoomActivity(roomCode, { force: true });
 
-    socket.to(roomId).emit('user_joined', { username, roomId, socketId: socket.id });
-    broadcastRoomUsers(io, roomId);
+    socket.to(roomCode).emit('user_joined', { username, roomCode, socketId: socket.id });
+    broadcastRoomUsers(io, roomCode);
 }
 
-function leaveRoom(io, socket, { roomId, username }) {
-    try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
-    socket.leave(roomId);
-    socket.data.roomId = null;
+function leaveRoom(io, socket, payload) {
+    const roomCode = readRoomCode(payload);
+    const username = payload?.username;
+    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    socket.leave(roomCode);
+    socket.data.roomCode = null;
 
-    console.log(`User ${username} left room ${roomId}`);
-    markRoomActivity(roomId, { force: true });
+    console.log(`User ${username} left room ${roomCode}`);
+    markRoomActivity(roomCode, { force: true });
 
-    socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
-    broadcastRoomUsers(io, roomId);
-    evictIfEmpty(io, roomId);
+    socket.to(roomCode).emit('user_left', { username, roomCode, socketId: socket.id });
+    broadcastRoomUsers(io, roomCode);
+    evictIfEmpty(io, roomCode);
 }
 
 // Flush + drop the in-memory authoritative document once a room has no sockets
 // left. Runs after the socket has already left/disconnected, so fetchSockets
 // reflects the post-departure membership.
-async function evictIfEmpty(io, roomId) {
-    if (!roomId) return;
+async function evictIfEmpty(io, roomCode) {
+    if (!roomCode) return;
     try {
-        const sockets = await io.in(roomId).fetchSockets();
-        if (sockets.length === 0) await evictRoom(roomId);
+        const sockets = await io.in(roomCode).fetchSockets();
+        if (sockets.length === 0) await evictRoom(roomCode);
     } catch (err) {
-        console.error(`[Room] evictIfEmpty error for ${roomId}:`, err.message);
+        console.error(`[Room] evictIfEmpty error for ${roomCode}:`, err.message);
     }
 }
 
-function updateUsername(io, socket, { roomId, newUsername }) {
-    if (!roomId || !newUsername) return;
-    try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
+function updateUsername(io, socket, payload) {
+    const roomCode = readRoomCode(payload);
+    const newUsername = payload?.newUsername;
+    if (!roomCode || !newUsername) return;
+    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
 
     const oldUsername = socket.data.username;
     socket.data.username = newUsername;
 
-    console.log(`User ${oldUsername} changed name to ${newUsername} in room ${roomId}`);
+    console.log(`User ${oldUsername} changed name to ${newUsername} in room ${roomCode}`);
 
-    socket.to(roomId).emit('user_name_changed', { socketId: socket.id, oldUsername, newUsername });
+    socket.to(roomCode).emit('user_name_changed', { socketId: socket.id, oldUsername, newUsername });
 
-    broadcastRoomUsers(io, roomId);
+    broadcastRoomUsers(io, roomCode);
 }
 
 
-function joinRoomOverlay(io, socket, { roomId, username }) {
-    const authRoomId = socket.data?.auth?.roomId?.toString();
-    if (!authRoomId || authRoomId !== (roomId || '').toString()) {
+function joinRoomOverlay(io, socket, payload) {
+    const roomCode = readRoomCode(payload);
+    const username = payload?.username;
+    const authRoomCode = socket.data?.auth?.roomCode?.toString();
+    if (!authRoomCode || authRoomCode !== (roomCode || '').toString()) {
         socket.emit('room_error', { message: 'Token does not authorize this room.' });
         return;
     }
 
-    socket.join(roomId);
-    socket.data.roomId = roomId;
+    socket.join(roomCode);
+    socket.data.roomCode = roomCode;
     socket.data.username = username || 'Presenter';
     socket.data.isOverlay = true;
 
-    console.log(`[Overlay] ${socket.data.username} joined room ${roomId} via overlay`);
-    markRoomActivity(roomId, { force: true });
+    console.log(`[Overlay] ${socket.data.username} joined room ${roomCode} via overlay`);
+    markRoomActivity(roomCode, { force: true });
 
-    socket.emit('room_joined', { roomId });
-    socket.to(roomId).emit('user_joined', { username: socket.data.username, roomId, socketId: socket.id });
-    broadcastRoomUsers(io, roomId);
+    socket.emit('room_joined', { roomCode });
+    socket.to(roomCode).emit('user_joined', { username: socket.data.username, roomCode, socketId: socket.id });
+    broadcastRoomUsers(io, roomCode);
 }
 
-function onOverlayReady(socket, { roomId, shareId }) {
-    if (!roomId || !shareId) return;
-    socket.to(roomId).emit('overlay:ready', { shareId });
+function onOverlayReady(socket, payload) {
+    const roomCode = readRoomCode(payload);
+    const shareId = payload?.shareId;
+    if (!roomCode || !shareId) return;
+    socket.to(roomCode).emit('overlay:ready', { shareId });
 }
 
 function onDisconnect(io, socket) {
-    const { roomId, username } = socket.data;
-    if (roomId) {
-        socket.to(roomId).emit('user_left', { username, roomId, socketId: socket.id });
-        broadcastRoomUsers(io, roomId);
-        evictIfEmpty(io, roomId);
+    const { roomCode, username } = socket.data;
+    if (roomCode) {
+        socket.to(roomCode).emit('user_left', { username, roomCode, socketId: socket.id });
+        broadcastRoomUsers(io, roomCode);
+        evictIfEmpty(io, roomCode);
     }
 }
 
-async function getRoomUsers(io, roomId) {
+async function getRoomUsers(io, roomCode) {
     try {
-        const sockets = await io.in(roomId).fetchSockets();
+        const sockets = await io.in(roomCode).fetchSockets();
         return sockets
             .filter(s => !s.data.isOverlay)
             .map(s => ({
@@ -147,9 +156,9 @@ async function getRoomUsers(io, roomId) {
     }
 }
 
-async function broadcastRoomUsers(io, roomId) {
-    const users = await getRoomUsers(io, roomId);
-    io.to(roomId).emit('room_users', { users });
+async function broadcastRoomUsers(io, roomCode) {
+    const users = await getRoomUsers(io, roomCode);
+    io.to(roomCode).emit('room_users', { users });
 }
 
 export const registerRoomHandlers = (io, socket) => {

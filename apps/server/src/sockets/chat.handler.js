@@ -1,16 +1,17 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
-import { ensureAuthorizedRoom } from '../utils/guard.js';
+import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 
 // Text Chat Message Handler
 const handleChatMessage = (io, socket) => async (data) => {
     try {
-        const { roomId, message } = data;
+        const roomCode = readRoomCode(data);
+        const { message } = data;
 
-        if (!roomId || !message) {
+        if (!roomCode || !message) {
             return;
         }
 
-        try { ensureAuthorizedRoom(socket, roomId); } catch (e) { return; }
+        try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
 
         // Create a payload for broadcasting
         const payload = {
@@ -20,8 +21,8 @@ const handleChatMessage = (io, socket) => async (data) => {
         };
 
         // Broadcast to everyone else in the room
-        socket.to(roomId).emit('chat:message', payload);
-        await markRoomActivity(roomId);
+        socket.to(roomCode).emit('chat:message', payload);
+        await markRoomActivity(roomCode);
     } catch (error) {
         console.error('Error handling chat:message:', error);
     }

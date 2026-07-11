@@ -43,7 +43,8 @@ export const initializeSockets = (io) => {
         try {
             const decoded = verifyToken(token);
             socket.data.auth = {
-                roomId: decoded.roomId,
+                // Legacy wire key: accept `roomId` from tokens issued before the rename.
+                roomCode: decoded.roomCode ?? decoded.roomId,
                 role: decoded.role
             };
             next();

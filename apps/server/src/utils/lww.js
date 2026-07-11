@@ -1,7 +1,7 @@
 // Server-side Last-Write-Wins comparison.
 //
 // This MUST stay byte-for-byte equivalent to the client's `shouldAcceptRemote`
-// in apps/web/src/utils/canvasSerializer.js — the server can only be authoritative
+// in apps/web/src/sync/canvasSerializer.js — the server can only be authoritative
 // without breaking clients if it resolves conflicts by the exact same rule the
 // clients already use. If the two ever drift, clients and server converge to
 // different winners and the canvas diverges.

@@ -29,14 +29,14 @@ import {
  *   2. Extract the MediaStreamTrack, create a <video> element
  *   3. Feed into the existing setupOverlay() pipeline
  *
- * @param {string} roomId
+ * @param {string} roomCode
  * @param {string} username
  * @param {boolean} isConnected
  * @param {fabric.Canvas|null} fabricCanvas
  * @param {import('livekit-client').Room} room - Shared LiveKit Room from useLiveKitRoom
  * @param {HTMLElement|null} screenShareLayer - The DOM layer for video overlays
  */
-export default function useScreenShare(roomId, username, isConnected, fabricCanvas, room, screenShareLayer) {
+export default function useScreenShare(roomCode, username, isConnected, fabricCanvas, room, screenShareLayer) {
   const [isSharing, setIsSharing] = useState(false)
   const [activeShares, setActiveShares] = useState(new Map()) // shareId -> { username, displaySurface?, ... }
   const [overlayReadyUrl, setOverlayReadyUrl] = useState(null)
@@ -248,7 +248,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
           captureY = Math.round(window.screenY + (window.outerHeight - window.innerHeight))
         }
         setOverlayReadyUrl(
-          `evodraw://start?room=${encodeURIComponent(roomId)}` +
+          `evodraw://start?room=${encodeURIComponent(roomCode)}` +
           `&token=${encodeURIComponent(token || '')}` +
           `&server=${encodeURIComponent(SERVER_URL)}` +
           `&shareId=${encodeURIComponent(shareId)}` +
@@ -263,7 +263,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       // Notify room via socket signaling (for metadata tracking)
       const socket = getSocket()
       if (socket) {
-        socket.emit('screen:start', { roomId, shareId, displaySurface })
+        socket.emit('screen:start', { roomCode, shareId, displaySurface })
       }
 
       // Create local preview as a DOM overlay
@@ -288,7 +288,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       console.log('[ScreenShare] Cancelled or error:', err.message)
       setIsSharing(false)
     }
-  }, [isSharing, fabricCanvas, screenShareLayer, room, roomId, generateShareId, buildVideoConstraints, setupOverlay])
+  }, [isSharing, fabricCanvas, screenShareLayer, room, roomCode, generateShareId, buildVideoConstraints, setupOverlay])
 
   // Stop sharing my screen
   const stopSharing = useCallback(async () => {
@@ -321,7 +321,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     // Notify room
     const socket = getSocket()
     if (socket) {
-      socket.emit('screen:stop', { roomId, shareId })
+      socket.emit('screen:stop', { roomCode, shareId })
     }
 
     shareIdRef.current = null
@@ -330,7 +330,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     setOverlayReadyUrl(null)
     setSharingShareId(null)
     setSharingDisplaySurface(null)
-  }, [room, roomId, removeShareObject])
+  }, [room, roomCode, removeShareObject])
 
   // Handle Socket.io signaling events (metadata tracking)
   useEffect(() => {
@@ -378,7 +378,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
     socket.on('overlay:ready', handleOverlayReady)
 
     // Request active shares on mount (late joiner)
-    socket.emit('screen:get_active', { roomId })
+    socket.emit('screen:get_active', { roomCode })
 
     return () => {
       socket.off('screen:started', handleStarted)
@@ -386,7 +386,7 @@ export default function useScreenShare(roomId, username, isConnected, fabricCanv
       socket.off('screen:active_list', handleActiveList)
       socket.off('overlay:ready', handleOverlayReady)
     }
-  }, [isConnected, roomId, removeShareObject])
+  }, [isConnected, roomCode, removeShareObject])
 
   // Handle incoming remote screen share tracks from LiveKit
   useEffect(() => {

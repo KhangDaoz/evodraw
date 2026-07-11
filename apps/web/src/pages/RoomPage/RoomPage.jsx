@@ -236,7 +236,7 @@ export default function RoomPage() {
     setCanvasBgColor(bgColor)
     const socket = getSocket()
     if (socket && roomCode) {
-      socket.emit('canvas_bg_change', { roomId: roomCode, bgId, bgColor })
+      socket.emit('canvas_bg_change', { roomCode, bgId, bgColor })
     }
   }, [roomCode])
 
@@ -267,7 +267,7 @@ export default function RoomPage() {
         strokeWidth={strokeWidth}
         strokeOpacity={strokeOpacity}
         strokeStyle={strokeStyle}
-        roomId={roomCode}
+        roomCode={roomCode}
         username={username}
         isConnected={isConnected}
         canvasBgColor={canvasBgColor}

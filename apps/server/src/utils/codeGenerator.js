@@ -6,6 +6,6 @@ export function generateRoomCode() {
 }
 
 // Generate a 4-digit PIN passcode
-export function generateRoomPassCode() {
+export function generateRoomPasscode() {
     return Math.floor(1000 + Math.random() * 9000).toString();
 }

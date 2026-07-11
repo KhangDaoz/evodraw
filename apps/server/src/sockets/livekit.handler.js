@@ -1,13 +1,16 @@
 import { AccessToken } from 'livekit-server-sdk';
-import { ensureAuthorizedRoom } from '../utils/guard.js';
+import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 
 // LiveKit Token Generator
 // Shared by voice chat (useVoiceChat) and screen share (useScreenShare) on the
 // web client: both reuse a single LiveKit Room created from this one token.
 // Clients request a JWT to connect to the LiveKit SFU for voice/video/screen tracks.
-const handleGetToken = (io, socket) => async ({ roomId, username }, callback) => {
+const handleGetToken = (io, socket) => async (payload, callback) => {
     try {
-        try { ensureAuthorizedRoom(socket, roomId); } catch (e) {
+        const roomCode = readRoomCode(payload);
+        const username = payload?.username;
+
+        try { ensureAuthorizedRoom(socket, roomCode); } catch (e) {
             if (callback) callback({ error: 'Unauthorized room access' });
             return;
         }
@@ -33,14 +36,14 @@ const handleGetToken = (io, socket) => async ({ roomId, username }, callback) =>
 
         token.addGrant({
             roomJoin: true,
-            room: roomId,
+            room: roomCode,
             canPublish: true,
             canSubscribe: true,
         });
 
         const jwt = await token.toJwt();
 
-        console.log(`[LiveKit] Token issued for ${identity} in room ${roomId}`);
+        console.log(`[LiveKit] Token issued for ${identity} in room ${roomCode}`);
         if (callback) {
             callback({ token: jwt, url: livekitUrl });
         }

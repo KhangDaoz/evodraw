@@ -6,7 +6,7 @@ import {
   serializeCanvas,
   loadCanvasSnapshot,
   getSceneVersion,
-} from '../utils/canvasSerializer'
+} from '../sync/canvasSerializer'
 
 const SNAPSHOT_PUSH_INTERVAL_MS = 10_000
 
@@ -15,7 +15,7 @@ const SNAPSHOT_PUSH_INTERVAL_MS = 10_000
  * real-time operation sync (object:added / modified / removed),
  * server-side snapshot persistence, and initial state recovery.
  */
-export default function useCanvasSync(canvas, syncState, roomId, isConnected, canvasBgColor, canvasBgId, onBgColorReceived) {
+export default function useCanvasSync(canvas, syncState, roomCode, isConnected, canvasBgColor, canvasBgId, onBgColorReceived) {
   const bgStateRef = useRef({ canvasBgColor, canvasBgId })
   const lastPushedVersionRef = useRef(0)
   const snapshotLoadedRef = useRef(false)
@@ -26,7 +26,7 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
   }, [canvasBgColor, canvasBgId])
 
   useEffect(() => {
-    if (!canvas || !roomId || !isConnected) return
+    if (!canvas || !roomCode || !isConnected) return
 
     const socket = getSocket()
     if (!socket || !socket.connected) return
@@ -35,7 +35,7 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
 
     // ── Outbound: local changes → server ──
     const detach = attachSerializer(canvas, (op) => {
-      socket.emit('canvas_op', { roomId, op })
+      socket.emit('canvas_op', { roomCode, op })
     }, syncState.current)
 
     // ── Inbound: server → local canvas ──
@@ -93,8 +93,8 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
     // Ask server for stored snapshot AND peers in parallel.
     // onStateInit merges via LWW so peer state works alongside server snapshot
     // (needed for screen-share rects which never enter MongoDB snapshots).
-    socket.emit('request_snapshot', { roomId })
-    socket.emit('canvas_state_request', { roomId })
+    socket.emit('request_snapshot', { roomCode })
+    socket.emit('canvas_state_request', { roomCode })
 
     // ── Periodic snapshot push (dirty flag) ──
     const pushInterval = setInterval(() => {
@@ -104,7 +104,7 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
       const currentVersion = getSceneVersion(canvas)
       if (currentVersion > 0 && currentVersion !== lastPushedVersionRef.current) {
         const { objects } = serializeCanvas(canvas)
-        socket.emit('save_snapshot', { roomId, elements: objects, sceneVersion: currentVersion })
+        socket.emit('save_snapshot', { roomCode, elements: objects, sceneVersion: currentVersion })
         lastPushedVersionRef.current = currentVersion
         canvas._evoIsDirty = false
         console.log(`[Sync] Pushed snapshot (v${currentVersion}, ${objects.length} elements)`)
@@ -119,5 +119,5 @@ export default function useCanvasSync(canvas, syncState, roomId, isConnected, ca
       socket.off('canvas_state_request', onStateRequest)
       socket.off('canvas_state_init', onStateInit)
     }
-  }, [canvas, roomId, isConnected])
+  }, [canvas, roomCode, isConnected])
 }

@@ -40,7 +40,7 @@ export default function App() {
     if (params.server) applyServerUrl(params.server);
     localStorage.setItem('token', params.token);
     setRoomInfo({
-      roomId: params.room,
+      roomCode: params.room,
       username: params.username || 'Presenter',
       shareId: params.shareId || null,
       fromDeepLink: true,

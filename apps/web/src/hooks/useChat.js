@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getSocket } from '../services/socket';
 
-export default function useChat(roomId, currentUsername) {
+export default function useChat(roomCode, currentUsername) {
   const [messages, setMessages] = useState([]);
   
   const usernameRef = useRef(currentUsername);
@@ -28,19 +28,19 @@ export default function useChat(roomId, currentUsername) {
       socket.off('chat:message', handleIncomingMessage);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, handleIncomingMessage]);
+  }, [roomCode, handleIncomingMessage]);
 
   const sendMessage = useCallback((text) => {
     const socket = getSocket();
     if (socket && text.trim()) {
-      socket.emit('chat:message', { roomId, message: text, username: usernameRef.current });
+      socket.emit('chat:message', { roomCode, message: text, username: usernameRef.current });
       // Predictively add to own UI
       setMessages((prev) => [
         ...prev, 
         { sender: usernameRef.current, text: text, timestamp: Date.now() }
       ]);
     }
-  }, [roomId]);
+  }, [roomCode]);
 
   return { messages, sendMessage };
 }

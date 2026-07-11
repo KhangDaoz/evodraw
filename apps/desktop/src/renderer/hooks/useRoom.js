@@ -16,7 +16,7 @@ export default function useRoom(serverUrl, roomCode, currentUsername) {
     if (!hasJoined.current && roomCode && usernameRef.current) {
       const socket = getSocket();
       // Use overlay join — JWT already proves room access, no passcode needed
-      socket.emit('join_room_overlay', { roomId: roomCode, username: usernameRef.current });
+      socket.emit('join_room_overlay', { roomCode, username: usernameRef.current });
       hasJoined.current = true;
     }
   }, [roomCode]);
@@ -61,7 +61,7 @@ export default function useRoom(serverUrl, roomCode, currentUsername) {
     usernameRef.current = newUsername;
     const socket = getSocket();
     if (socket && isConnected) {
-      socket.emit('update_username', { roomId: roomCode, newUsername });
+      socket.emit('update_username', { roomCode, newUsername });
     }
   }, [roomCode, isConnected]);
 
@@ -80,7 +80,7 @@ export default function useRoom(serverUrl, roomCode, currentUsername) {
     socket.on('room_users', handleRoomUsers);
 
     if (socket.connected && !hasJoined.current) {
-      socket.emit('join_room_overlay', { roomId: roomCode, username: usernameRef.current });
+      socket.emit('join_room_overlay', { roomCode, username: usernameRef.current });
       hasJoined.current = true;
       setIsConnected(true);
     }
@@ -88,7 +88,7 @@ export default function useRoom(serverUrl, roomCode, currentUsername) {
     return () => {
       const s = getSocket();
       if (s) {
-        s.emit('leave_room', { roomId: roomCode, username: usernameRef.current });
+        s.emit('leave_room', { roomCode, username: usernameRef.current });
         s.off('connect', handleConnect);
         s.off('disconnect', handleDisconnect);
         s.off('connect_error', handleConnectError);

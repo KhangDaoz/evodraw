@@ -240,8 +240,8 @@ export async function loadCanvasSnapshot(canvas, snapshot, state) {
 }
 
 /**
- * Export toàn bộ canvas thành JSON string để lưu file.
- * Tương đương Room.exportBoard() trong sơ đồ thiết kế.
+ * Export the whole canvas as a JSON string for saving to a file.
+ * Equivalent to Room.exportBoard() in the design diagram.
  */
 export function exportBoard(canvas) {
   const snapshot = serializeCanvas(canvas)
@@ -256,8 +256,8 @@ export function exportBoard(canvas) {
 }
 
 /**
- * Import JSON string → khôi phục canvas (replace mode).
- * Tương đương Room.importBoard() trong sơ đồ thiết kế.
+ * Import a JSON string → restore the canvas (replace mode).
+ * Equivalent to Room.importBoard() in the design diagram.
  */
 export async function importBoard(canvas, jsonString, syncState) {
   const data = JSON.parse(jsonString)

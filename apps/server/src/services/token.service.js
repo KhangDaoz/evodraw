@@ -1,10 +1,10 @@
 import jwt from 'jsonwebtoken';
 
-export function generateRoomToken(roomId, role = 'member') {
+export function generateRoomToken(roomCode, role = 'member') {
     const token = jwt.sign(
-        { 
-            roomId,
-            role           // 'creator' hoặc 'member'
+        {
+            roomCode,
+            role           // 'creator' or 'member'
         },
         process.env.TOKEN_SECRET,
         { expiresIn: '24h' }

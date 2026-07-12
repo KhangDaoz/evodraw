@@ -23,6 +23,9 @@ export default function JoinPage() {
 
         if (isMounted) {
           const username = localStorage.getItem('evodraw_username') || generateAnonymousName()
+          // Persist so the name stays stable if the user refreshes the room page
+          // (a freshly generated invite name would otherwise change on reload).
+          localStorage.setItem('evodraw_username', username)
           navigate(`/room/${roomCode.toUpperCase()}`, {
             state: { username, fromInvite: true },
             replace: true

@@ -18,6 +18,7 @@ import OpenInAppBanner from '../../components/OpenInAppBanner/OpenInAppBanner'
 import DesktopInstallHint from '../../components/OpenInAppBanner/DesktopInstallHint'
 import VolumePopup from '../../components/VolumePopup/VolumePopup'
 import { generateAnonymousName } from '../../utils/nameGenerator'
+import { hasValidRoomToken } from '../../utils/authToken'
 import './RoomPage.css'
 
 export default function RoomPage() {
@@ -243,7 +244,11 @@ export default function RoomPage() {
     }
   }, [roomCode])
 
-  if (!passcode && !fromInvite) {
+  // Admit if we arrived with a passcode/invite, OR already hold a valid token for
+  // this room. The token survives a page refresh (nav state does not), so this is
+  // what keeps a reload from bouncing the user out. Server socket-auth is still the
+  // real gate — a forged token here just fails the socket handshake instead.
+  if (!passcode && !fromInvite && !hasValidRoomToken(roomCode)) {
     return <Navigate to="/" state={{ roomCode, error: 'Please enter the room passcode' }} replace />
   }
 

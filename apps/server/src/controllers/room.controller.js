@@ -1,5 +1,5 @@
 import { createRoomService, getRoom, updateRoomService } from '../services/room.service.js';
-import { generateRoomToken } from '../services/token.service.js';
+import { generateRoomToken, generateInviteToken, verifyInviteToken } from '../services/token.service.js';
 
 export async function createRoom(req, res) {
     try {
@@ -50,12 +50,66 @@ export async function joinRoom(req, res) {
     }
 }
 
+// Issue a short-lived invite token for the caller's room. Auth: validateToken has
+// already verified the caller holds a room JWT and set req.roomCode.
+export async function createInvite(req, res) {
+    try {
+        const roomCode = req.roomCode;
+        if (!roomCode) {
+            return res.status(401).json({ success: false, message: 'Unauthorized.' });
+        }
+        const invite = generateInviteToken(roomCode);
+        res.status(200).json({ success: true, data: { invite } });
+    } catch (error) {
+        console.error('Create invite error:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+}
+
+// Redeem an invite token → a normal member token, without requiring the passcode
+// (the invite itself is the proof of access). The socket join_room handler accepts
+// this member token directly, so the passcode never has to travel to the joiner.
+export async function redeemInvite(req, res) {
+    try {
+        const { invite } = req.body || {};
+        if (!invite || typeof invite !== 'string') {
+            return res.status(400).json({ success: false, message: 'Invalid invite.' });
+        }
+
+        let roomCode;
+        try {
+            roomCode = verifyInviteToken(invite);
+        } catch (error) {
+            return res.status(401).json({ success: false, message: 'Invalid or expired invite link.' });
+        }
+
+        // Confirm the room still exists (invites outlive TTL-deleted rooms).
+        const room = await getRoom({ code: roomCode, skipPasscodeCheck: true });
+        if (!room) {
+            return res.status(404).json({ success: false, message: 'This room no longer exists.' });
+        }
+
+        const token = generateRoomToken(room.code, 'member');
+        res.set('Authorization', `Bearer ${token}`);
+
+        res.status(200).json({
+            success: true,
+            data: { code: room.code },
+        });
+    } catch (error) {
+        console.error('Redeem invite error:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+}
+
 export async function updateRoom(req, res) {
     try {
-        const { roomVersion, elements, appState, status } = req.body || {};
+        const { elements, appState, status } = req.body || {};
         // Use the room code from the verified token instead of the request body
         const roomCode = req.roomCode;
-        await updateRoomService({ code: roomCode, roomVersion, elements, appState, status });
+        // roomVersion is intentionally not forwarded: the server owns versioning
+        // (updateRoomService bumps its own monotonic counter), so a client value is ignored.
+        await updateRoomService({ code: roomCode, elements, appState, status });
 
         res.status(200).json({
             success: true,

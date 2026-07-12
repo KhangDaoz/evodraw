@@ -11,18 +11,25 @@ import fileRoutes from './routes/file.routes.js';
 
 // cors configuration - allow localhost and any origins specified in .env
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(',').map(o => o.trim());
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+if (IS_PRODUCTION && !process.env.ALLOWED_ORIGINS) {
+    console.warn('[CORS] NODE_ENV=production but ALLOWED_ORIGINS is unset — only the desktop (null origin) will be accepted, no browser origins. Set ALLOWED_ORIGINS to your frontend URL(s).');
+}
 
 // A request is allowed when it has no Origin (non-browser client), an opaque
-// "null" origin (packaged Electron desktop app loaded from file://), a
-// localhost origin, or an origin explicitly listed in ALLOWED_ORIGINS. Socket
-// and REST access are still gated by the JWT auth middleware, so this only
-// governs which browsers/clients may talk to the API, not authorization.
+// "null" origin (packaged Electron desktop app loaded from file://), or an
+// origin explicitly listed in ALLOWED_ORIGINS. Any-localhost-port is a dev-only
+// convenience and is NOT accepted in production (a local malicious page could
+// otherwise make credentialed requests). Socket and REST access are still gated
+// by the JWT auth middleware, so this only governs which browsers/clients may
+// talk to the API, not authorization.
 const isAllowedOrigin = (origin) =>
     !origin ||
     origin === 'null' ||
     ALLOWED_ORIGINS.includes(origin) ||
-    origin.startsWith('http://localhost:') ||
-    origin.startsWith('http://127.0.0.1:');
+    (!IS_PRODUCTION &&
+        (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')));
 
 // app initialization
 const app = express();

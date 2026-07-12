@@ -31,20 +31,31 @@ async function joinRoom(io, socket, payload) {
         return;
     }
 
-    if (!roomCode || roomCode.length !== 6 || !passcode || !/^\d{4}$/.test(passcode)) {
-        socket.emit('room_error', { message: 'Invalid room code or passcode format.' });
-        return;
-    }
+    // If the socket's JWT already authorizes this room, trust it and skip the
+    // redundant passcode re-check. The token is only issued after a passcode check
+    // (REST /join) or an invite redemption (REST /redeem-invite), and every other
+    // socket event already trusts it via ensureAuthorizedRoom. This is what lets an
+    // invite-link joiner connect without the passcode ever leaving the server.
+    let tokenAuthorizes = false;
+    try { ensureAuthorizedRoom(socket, roomCode); tokenAuthorizes = true; } catch (e) { tokenAuthorizes = false; }
 
-    try {
-        if (!await verifyRoomAccess({ code: roomCode, passcode })) {
-            socket.emit('room_error', { message: 'Invalid room code or passcode.' });
+    if (!tokenAuthorizes) {
+        // Fallback for any client whose token doesn't match: verify the passcode.
+        if (!roomCode || roomCode.length !== 6 || !passcode || !/^\d{4}$/.test(passcode)) {
+            socket.emit('room_error', { message: 'Invalid room code or passcode format.' });
             return;
         }
-    } catch (error) {
-        console.error('Socket join_room error:', error);
-        socket.emit('room_error', { message: 'Failed to verify room access.' });
-        return;
+
+        try {
+            if (!await verifyRoomAccess({ code: roomCode, passcode })) {
+                socket.emit('room_error', { message: 'Invalid room code or passcode.' });
+                return;
+            }
+        } catch (error) {
+            console.error('Socket join_room error:', error);
+            socket.emit('room_error', { message: 'Failed to verify room access.' });
+            return;
+        }
     }
 
     socket.join(roomCode);

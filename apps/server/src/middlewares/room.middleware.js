@@ -20,7 +20,7 @@ export function validateRoom(req, res, next) {
 }
 
 export function validateUpdateRoom(req, res, next) {
-    const { elements, appState, roomVersion } = req.body || {};
+    const { elements, appState } = req.body || {};
 
     if (!Array.isArray(elements)) {
         return res.status(400).json({
@@ -36,12 +36,8 @@ export function validateUpdateRoom(req, res, next) {
         });
     }
 
-    if (typeof roomVersion !== 'number' || roomVersion < 0) {
-        return res.status(400).json({
-            success: false,
-            message: 'Invalid format: "roomVersion" must be a non-negative number.'
-        });
-    }
+    // roomVersion is not validated: the server owns versioning (see updateRoomService),
+    // so any client-supplied value is ignored rather than trusted.
 
     next();
 }

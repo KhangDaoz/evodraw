@@ -54,7 +54,11 @@ export async function uploadRoomFile({ roomCode, file }) {
         },
     });
 
-    // Make the file publicly accessible (for canvas embedding)
+    // Accepted risk: uploaded files are made world-readable. The URL is embedded in
+    // canvas objects, relayed to every peer, and persisted in MongoDB, so a signed
+    // (expiring) URL would break historical boards on reload. Access control instead
+    // relies on the unguessable random UUID in the path (`rooms/<code>/<uuid>.<ext>`);
+    // anyone with the URL can read the file. Do not store sensitive content here.
     await bucketFile.makePublic();
     const url = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
 

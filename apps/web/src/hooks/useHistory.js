@@ -70,27 +70,21 @@ export default function useHistory(canvas, syncState) {
       dragState.current = { ...e.target.toJSON(['_evoId', '_evoImage']), _evoId: e.target._evoId, _evoImage: e.target._evoImage || false }
     }
 
+    // Modification events trigger 'before' state capture
+    const onMouseDown = (o) => {
+      if (o.target && !isDragging.current) onBeforeModify(o)
+    }
+
     canvas.on('object:added', onAdded)
     canvas.on('object:removed', onRemoved)
     canvas.on('object:modified', onModified)
-    
-    // Modification events trigger 'before' state capture
-    canvas.on('mouse:down', (o) => {
-      if (o.target && !isDragging.current) onBeforeModify(o)
-    })
-    
-    // Capture path explicitly when drawn
-    canvas.on('path:created', ({ path }) => {
-       if (shouldIgnore()) return
-       // path:created happens before object:added usually. 
-       // For freehand drawing, we just need 'object:added' which will fire shortly after.
-    })
+    canvas.on('mouse:down', onMouseDown)
 
     return () => {
       canvas.off('object:added', onAdded)
       canvas.off('object:removed', onRemoved)
       canvas.off('object:modified', onModified)
-      canvas.off('mouse:down', onBeforeModify)
+      canvas.off('mouse:down', onMouseDown)
     }
   }, [canvas, saveState, syncState])
 

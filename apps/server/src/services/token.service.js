@@ -19,3 +19,32 @@ export function verifyToken(token) {
         throw new Error('Invalid or expired token');
     }
 }
+
+// Invite tokens replace the old base64(roomCode:passcode) share links. The passcode
+// is never placed in the URL; possession of a valid, short-lived invite is the proof
+// of access, which redeem-invite exchanges for a normal member token.
+const INVITE_TOKEN_TTL = process.env.INVITE_TOKEN_TTL || '24h';
+
+export function generateInviteToken(roomCode) {
+    return jwt.sign(
+        { roomCode, purpose: 'invite' },
+        process.env.TOKEN_SECRET,
+        { expiresIn: INVITE_TOKEN_TTL }
+    );
+}
+
+// Verify an invite token and return its roomCode. Throws on any invalid/expired
+// token or one not issued as an invite. Error message is uniform so it doesn't
+// leak whether the token was malformed, expired, or the wrong purpose.
+export function verifyInviteToken(token) {
+    let decoded;
+    try {
+        decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    } catch (error) {
+        throw new Error('Invalid or expired invite');
+    }
+    if (decoded.purpose !== 'invite' || !decoded.roomCode) {
+        throw new Error('Invalid or expired invite');
+    }
+    return decoded.roomCode;
+}

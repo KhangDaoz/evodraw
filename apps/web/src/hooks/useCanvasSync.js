@@ -41,13 +41,21 @@ export default function useCanvasSync(canvas, syncState, roomCode, isConnected, 
       socket.emit('canvas_op', { roomCode, op })
     }, syncState.current)
 
+    // Serialize every canvas-mutating apply through one promise chain. applyRemoteOp
+    // and loadCanvasSnapshot are async and toggle the shared syncState._applying flag
+    // around an await; without serialization, concurrent socket handlers interleave and
+    // one op's finally clears the flag mid-flight, letting a local edit slip through
+    // unsynced (and unrecorded in history). One-at-a-time keeps the window contiguous.
+    let applyQueue = Promise.resolve()
+    const enqueueApply = (fn) =>
+      (applyQueue = applyQueue.then(fn).catch((e) => console.error('[Sync] apply failed', e)))
+
     // ── Inbound: server → local canvas ──
-    const onRemoteOp = async ({ op }) => {
-      await applyRemoteOp(canvas, op, syncState.current)
-    }
+    const onRemoteOp = ({ op }) =>
+      enqueueApply(() => applyRemoteOp(canvas, op, syncState.current))
 
     // ── Server snapshot recovery (primary) ──
-    const onSnapshotLoaded = async ({ elements, sceneVersion }) => {
+    const onSnapshotLoaded = ({ elements, sceneVersion }) => enqueueApply(async () => {
       if (!elements) return
       if (snapshotLoadedRef.current) {
         // Already initialized (e.g. after a reconnect). Merge via LWW instead of
@@ -64,7 +72,7 @@ export default function useCanvasSync(canvas, syncState, roomCode, isConnected, 
       await loadCanvasSnapshot(canvas, { objects: elements, sceneVersion }, syncState.current)
       lastPushedVersionRef.current = sceneVersion || 0
       console.log(`[Sync] Loaded server snapshot (v${sceneVersion}, ${elements.length} elements)`)
-    }
+    })
 
     // ── Peer-to-peer fallback (secondary) ──
     const onStateRequest = ({ requesterId }) => {
@@ -74,7 +82,7 @@ export default function useCanvasSync(canvas, syncState, roomCode, isConnected, 
       socket.emit('canvas_state_response', { requesterId, snapshot })
     }
 
-    const onStateInit = async ({ snapshot }) => {
+    const onStateInit = ({ snapshot }) => enqueueApply(async () => {
       if (snapshot?.objects?.length > 0) {
         if (snapshotLoadedRef.current) {
           // Server snapshot already loaded — merge peer-only objects via LWW
@@ -93,7 +101,7 @@ export default function useCanvasSync(canvas, syncState, roomCode, isConnected, 
       } else if (snapshot?.bgColor && onBgColorReceived) {
         onBgColorReceived('default', snapshot.bgColor)
       }
-    }
+    })
 
     // Register listeners
     socket.on('canvas_op_received', onRemoteOp)

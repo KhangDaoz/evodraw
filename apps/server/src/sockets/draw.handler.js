@@ -6,6 +6,7 @@ import { applyOp, getSnapshot } from '../services/roomDocument.js';
 // Payload bounds to prevent memory/bandwidth DoS and runaway document growth.
 const MAX_SNAPSHOT_ELEMENTS = 100_000;
 const MAX_OP_BYTES = 1_000_000; // ~1 MB serialized per single canvas op
+const MAX_SNAPSHOT_BYTES = 10_000_000; // ~10 MB serialized for a full peer snapshot
 
 // Authoritative-server sync (Backend Tier 1). Set AUTHORITATIVE_SYNC=false to fall
 // back to the legacy pure-relay + client-snapshot behavior if a regression appears.
@@ -148,6 +149,20 @@ function onCanvasStateRequest(socket, data) {
 function onCanvasStateResponse(io, socket, { requesterId, snapshot }) {
     const roomCode = socket.data.auth?.roomCode;
     if (!roomCode) return;
+
+    // Bound the relayed snapshot: unlike canvas_op (guarded by MAX_OP_BYTES), this
+    // peer-supplied payload was previously forwarded unchecked, letting a room member
+    // exhaust a requester's memory/bandwidth with an oversized snapshot.
+    const objects = snapshot?.objects;
+    if (!Array.isArray(objects) || objects.length > MAX_SNAPSHOT_ELEMENTS) {
+        console.warn(`[CanvasState] Dropped invalid/oversized snapshot for room ${roomCode}`);
+        return;
+    }
+    if (JSON.stringify(snapshot).length > MAX_SNAPSHOT_BYTES) {
+        console.warn(`[CanvasState] Dropped oversized snapshot (>${MAX_SNAPSHOT_BYTES} bytes) for room ${roomCode}`);
+        return;
+    }
+
     // Forward only to a requester whose TOKEN authorizes the same room. We check
     // the token (set synchronously at connection) rather than room membership,
     // because joinRoom is async (awaits bcrypt) and the requester may not have

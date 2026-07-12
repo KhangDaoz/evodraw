@@ -26,6 +26,9 @@ export default function RoomPage() {
   const navigate = useNavigate()
   const [username, setUsername] = useState(() => location.state?.username || localStorage.getItem('evodraw_username') || generateAnonymousName())
   const [passcode] = useState(location.state?.passcode || '')
+  // Invite-joined users hold a member token but no passcode; capture the flag at
+  // mount so it survives the passcode-clearing navigation below.
+  const [fromInvite] = useState(!!location.state?.fromInvite)
   const [activeTool, setActiveTool] = useState('pen')
   const [strokeColor, setStrokeColor] = useState('#000000')
   const [strokeWidth, setStrokeWidth] = useState(5)
@@ -240,7 +243,7 @@ export default function RoomPage() {
     }
   }, [roomCode])
 
-  if (!passcode) {
+  if (!passcode && !fromInvite) {
     return <Navigate to="/" state={{ roomCode, error: 'Please enter the room passcode' }} replace />
   }
 

@@ -40,6 +40,49 @@ export async function joinRoom(code, passcode) {
 }
 
 /**
+ * Mint a share-link invite token for the current room. Requires the room token
+ * (from create/join) in localStorage. Returns { success, data: { invite } }.
+ */
+export async function createInvite() {
+  const token = localStorage.getItem('token')
+  const res = await fetch(`${BASE_URL}/rooms/invite`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.message || 'Failed to create invite link')
+  }
+
+  return res.json()
+}
+
+/**
+ * Exchange an invite token for a member token (stored for subsequent auth).
+ * Returns { success: true, data: { code } }.
+ */
+export async function redeemInvite(invite) {
+  const res = await fetch(`${BASE_URL}/rooms/redeem-invite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ invite }),
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.message || 'Invalid or expired invite link')
+  }
+
+  const token = res.headers.get('Authorization')?.split(' ')[1]
+  if (token) {
+    localStorage.setItem('token', token)
+  }
+
+  return res.json()
+}
+
+/**
  * Upload a file (image, etc.) to Firebase Storage via the server.
  * Returns { success: true, data: { fileId, url, originalName } }
  */

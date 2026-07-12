@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createInvite } from '../../services/api'
 import './SettingsPanel.css'
 
 const THEME_OPTIONS = [
@@ -99,14 +100,18 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
     }
   }
 
-  const handleShareLink = () => {
-    if (!roomCode || !passcode) return
-    const encoded = btoa(`${roomCode}:${passcode}`)
-    const inviteLink = `${window.location.origin}/join/${encoded}`
-    navigator.clipboard.writeText(inviteLink).then(() => {
+  const handleShareLink = async () => {
+    if (!roomCode) return
+    try {
+      // Server-signed invite token — the passcode is no longer embedded in the URL.
+      const { data } = await createInvite()
+      const inviteLink = `${window.location.origin}/join/${data.invite}`
+      await navigator.clipboard.writeText(inviteLink)
       setCopiedLink(true)
       setTimeout(() => setCopiedLink(false), 2000)
-    }).catch(err => console.error('Failed to copy', err))
+    } catch (err) {
+      console.error('Failed to create invite link', err)
+    }
   }
 
   return (
@@ -195,7 +200,8 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
                 </div>
               </div>
 
-              {/* PIN */}
+              {/* PIN — hidden for invite-joined users, who never receive the passcode */}
+              {passcode && (
               <div className="settings-section">
                 <div className="room-info-row">
                   <label className="settings-label">PIN</label>
@@ -224,6 +230,7 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Export / Import Board */}
               <div className="settings-section">

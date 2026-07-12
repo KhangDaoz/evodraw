@@ -65,23 +65,20 @@ export default function useHistory(canvas, syncState) {
       dragState.current = { ...e.target.toJSON(['_evoId', '_evoImage']), _evoId: e.target._evoId, _evoImage: e.target._evoImage || false }
     }
 
+    const onMouseDown = (o) => {
+      if (o.target && !isDragging.current) onBeforeModify(o)
+    }
+
     canvas.on('object:added', onAdded)
     canvas.on('object:removed', onRemoved)
     canvas.on('object:modified', onModified)
-
-    canvas.on('mouse:down', (o) => {
-      if (o.target && !isDragging.current) onBeforeModify(o)
-    })
-
-    canvas.on('path:created', () => {
-      if (shouldIgnore()) return
-    })
+    canvas.on('mouse:down', onMouseDown)
 
     return () => {
       canvas.off('object:added', onAdded)
       canvas.off('object:removed', onRemoved)
       canvas.off('object:modified', onModified)
-      canvas.off('mouse:down', onBeforeModify)
+      canvas.off('mouse:down', onMouseDown)
     }
   }, [canvas, saveState, syncState])
 

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { joinRoom } from '../../services/api'
+import { redeemInvite } from '../../services/api'
 import { generateAnonymousName } from '../../utils/nameGenerator'
 import './JoinPage.css'
 
@@ -14,27 +14,17 @@ export default function JoinPage() {
     const attemptJoin = async () => {
       try {
         if (!token) throw new Error('Invalid invite link')
-        
-        let decoded
-        try {
-          decoded = atob(token)
-        } catch(e) {
-          throw new Error('Malformed invite link')
-        }
 
-        const [roomCode, passcode] = decoded.split(':')
-        
-        if (!roomCode || !passcode) {
-          throw new Error('Invalid link structure')
-        }
+        // Exchange the invite token for a member token (stored by redeemInvite).
+        // The passcode is never in the link and never returned to the joiner —
+        // the member token alone authorizes the socket join.
+        const { data } = await redeemInvite(token)
+        const roomCode = data.code
 
-        // Verify with the backend
-        await joinRoom(roomCode, passcode)
-        
         if (isMounted) {
           const username = localStorage.getItem('evodraw_username') || generateAnonymousName()
           navigate(`/room/${roomCode.toUpperCase()}`, {
-            state: { passcode, username },
+            state: { username, fromInvite: true },
             replace: true
           })
         }
@@ -46,7 +36,7 @@ export default function JoinPage() {
     }
 
     attemptJoin()
-    
+
     return () => {
       isMounted = false
     }

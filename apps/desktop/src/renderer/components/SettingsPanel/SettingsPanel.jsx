@@ -83,7 +83,7 @@ export default function SettingsPanel({
                   <div className="room-info-row">
                     <label className="settings-label">PIN</label>
                     <div className="pin-field">
-                      <span className="pin-value">{showPin ? passcode : '••••'}</span>
+                      <span className="pin-value">{showPin ? passcode : '•'.repeat(passcode.length)}</span>
                       <button
                         className="pin-toggle"
                         onClick={() => setShowPin((v) => !v)}

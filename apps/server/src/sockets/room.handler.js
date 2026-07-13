@@ -2,6 +2,7 @@ import { markRoomActivity } from '../utils/roomActivity.js';
 import { verifyRoomAccess } from '../services/room.service.js';
 import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 import { evictRoom } from '../services/roomDocument.js';
+import { isRoomLocked, recordFailure, clearFailures } from '../utils/joinLimiter.js';
 
 // In-memory brute-force guard for socket joins, keyed on client IP.
 // Mirrors the REST joinRateLimiter; resets on restart (acceptable, like other in-memory state).
@@ -41,16 +42,26 @@ async function joinRoom(io, socket, payload) {
 
     if (!tokenAuthorizes) {
         // Fallback for any client whose token doesn't match: verify the passcode.
-        if (!roomCode || roomCode.length !== 6 || !passcode || !/^\d{4}$/.test(passcode)) {
+        // 4-6 chars is transitional (legacy 4-digit rooms TTL out within 24h).
+        if (!roomCode || roomCode.length !== 6 || !passcode || !/^[A-Za-z0-9]{4,6}$/.test(passcode)) {
             socket.emit('room_error', { message: 'Invalid room code or passcode format.' });
+            return;
+        }
+
+        // Per-room failure budget, shared with the REST /join path. Only guards
+        // the passcode fallback: token/invite joins above can never be locked out.
+        if (isRoomLocked(roomCode)) {
+            socket.emit('room_error', { message: 'Too many join attempts. Please try again later.' });
             return;
         }
 
         try {
             if (!await verifyRoomAccess({ code: roomCode, passcode })) {
+                recordFailure(roomCode);
                 socket.emit('room_error', { message: 'Invalid room code or passcode.' });
                 return;
             }
+            clearFailures(roomCode);
         } catch (error) {
             console.error('Socket join_room error:', error);
             socket.emit('room_error', { message: 'Failed to verify room access.' });

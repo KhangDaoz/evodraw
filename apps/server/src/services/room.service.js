@@ -60,8 +60,10 @@ export async function getRoom({ code, passcode, skipPasscodeCheck = false }) {
 	}
 
 	if (!skipPasscodeCheck) {
-		const hasPasscode = typeof passcode === 'string' && passcode.length > 0;
-		const isValidPasscode = hasPasscode && await bcrypt.compare(passcode, room.passcode);
+		// Uppercase so users can type the alphanumeric passcode in any case
+		// (a no-op for legacy digit-only passcodes).
+		const normalizedPasscode = String(passcode || '').trim().toUpperCase();
+		const isValidPasscode = normalizedPasscode.length > 0 && await bcrypt.compare(normalizedPasscode, room.passcode);
 
 		if (!isValidPasscode) {
 			const error = new Error('Invalid room code or passcode.');
@@ -90,7 +92,8 @@ export async function verifyRoomAccess({ code, passcode }) {
 	const room = await Room.findOne({ code: normalizedCode });
 	if (!room) return false;
 
-	return bcrypt.compare(String(passcode || ''), room.passcode);
+	// Uppercase mirrors getRoom: passcodes are stored uppercase, input may be typed lowercase.
+	return bcrypt.compare(String(passcode || '').trim().toUpperCase(), room.passcode);
 }
 
 export async function updateRoomService({ code, elements, appState, status }) {

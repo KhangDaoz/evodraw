@@ -146,10 +146,9 @@ export default function LandingPage() {
                 type="text"
                 placeholder="Passcode"
                 value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
-                maxLength={4}
+                onChange={(e) => setPasscode(e.target.value.toUpperCase())}
+                maxLength={6}
                 autoComplete="off"
-                inputMode="numeric"
               />
               <button type="submit" disabled={loading}>
                 {loading ? '...' : 'Join'}
@@ -158,7 +157,7 @@ export default function LandingPage() {
           </div>
 
           <div className="settings-hint">
-            <span>Preferences, languages, ...</span>
+            <span>Preferences</span>
             <svg className="hint-cursor" width="28" height="36" viewBox="0 0 28 36" fill="none">
               <path d="M7 3L7 25L12 19L17 29L20.5 27.5L15.5 18L23 18L7 3Z"
                 fill="#c0c0c0" stroke="#999" strokeWidth="1" strokeLinejoin="round" />
@@ -167,7 +166,7 @@ export default function LandingPage() {
         </>
       )}
 
-      <SettingsPanel />
+      <SettingsPanel username={displayName} onUsernameChange={setDisplayName} />
       <BottomBar />
     </div>
   )

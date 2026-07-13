@@ -1,34 +1,39 @@
 import { useState, useRef, useEffect } from 'react'
 import { createInvite } from '../../services/api'
+import { BG_PRESETS, resolveTheme, applyTheme } from '../../utils/theme'
 import './SettingsPanel.css'
 
 const THEME_OPTIONS = [
-  { id: 'light', icon: '☀️', label: 'Light' },
-  { id: 'dark', icon: '🌙', label: 'Dark' },
-  { id: 'system', icon: '🖥️', label: 'System' },
+  {
+    id: 'light',
+    label: 'Light',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+      </svg>
+    ),
+  },
+  {
+    id: 'dark',
+    label: 'Dark',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'system',
+    label: 'System',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <path d="M8 21h8M12 17v4" />
+      </svg>
+    ),
+  },
 ]
-
-// Each swatch has a light and dark variant — like Excalidraw
-export const BG_PRESETS = [
-  { id: 'default', light: '#ffffff', dark: '#121212' },
-  { id: 'warm', light: '#f5f0e8', dark: '#1a1714' },
-  { id: 'blue', light: '#f0f4ff', dark: '#121620' },
-  { id: 'sage', light: '#e8ede4', dark: '#141a12' },
-  { id: 'rose', light: '#fce4ec', dark: '#1c1215' },
-  { id: 'mint', light: '#e0f2f1', dark: '#0f1a19' },
-]
-
-export function resolveTheme(themeId) {
-  if (themeId === 'system') {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  }
-  return themeId
-}
-
-function applyTheme(themeId) {
-  document.documentElement.setAttribute('data-theme', themeId)
-  localStorage.setItem('evodraw_theme', themeId)
-}
 
 export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, username, onUsernameChange, canvasBgId, onBgChange, onExport, onImport }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -115,7 +120,9 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
   }
 
   return (
-    <div className="settings-wrapper" ref={panelRef}>
+    // stopPropagation: on the landing page the surrounding canvas click handler
+    // creates a room, which the panel's clicks must never trigger.
+    <div className="settings-wrapper" ref={panelRef} onClick={(e) => e.stopPropagation()}>
       {/* Hamburger button */}
       <button
         className="menu-btn"
@@ -132,81 +139,68 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
       {/* Dropdown panel */}
       {isOpen && (
         <div className="settings-panel">
-          {/* Display Name */}
-          <div className="settings-section">
-            <label className="settings-label">Display Name</label>
-            <input
-              className="settings-input"
-              type="text"
-              value={onUsernameChange ? localUsername : (username || '')}
-              onChange={onUsernameChange ? (e) => setLocalUsername(e.target.value) : undefined}
-              readOnly={!onUsernameChange}
-              placeholder="Username"
-              maxLength={24}
-              title={onUsernameChange ? undefined : 'Display name is set at join time'}
-            />
-          </div>
-
-          {/* Theme */}
-          <div className="settings-section">
-            <div className="theme-row">
-              <label className="settings-label">Theme</label>
-              <div className="theme-toggle">
-                {THEME_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    className={`theme-btn ${theme === opt.id ? 'active' : ''}`}
-                    onClick={() => handleThemeChange(opt.id)}
-                    title={opt.label}
-                  >
-                    {opt.icon}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Language */}
-          <div className="settings-section">
-            <select className="settings-select" defaultValue="en">
-              <option value="en">English</option>
-              <option value="vi">Tiếng Việt</option>
-            </select>
-          </div>
-
-          {/* Canvas Background — swatches adapt to current theme */}
-          <div className="settings-section">
-            <label className="settings-label">Canvas Background</label>
-            <div className="bg-swatches">
-              {BG_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  className={`bg-swatch ${activeBgId === preset.id ? 'active' : ''}`}
-                  style={{ background: preset[effectiveTheme] }}
-                  onClick={() => handleBgSelect(preset)}
-                  title={preset.id}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Room ID */}
           {roomCode && (
             <>
-              <div className="settings-section">
-                <div className="room-info-row">
-                  <label className="settings-label">Room ID</label>
-                  <span className="room-code-display">{roomCode}</span>
-                </div>
-              </div>
+              {/* Actions */}
+              <button className="menu-item" onClick={onExport} title="Export board as JSON">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>Export board...</span>
+              </button>
+              <label className="menu-item" title="Import board from JSON" tabIndex={0}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span>Import board...</span>
+                <input
+                  type="file"
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    if (e.target.files[0] && onImport) {
+                      onImport(e.target.files[0])
+                      e.target.value = ''
+                    }
+                  }}
+                />
+              </label>
+              <button className={`menu-item ${copiedLink ? 'success' : ''}`} onClick={handleShareLink}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                </svg>
+                <span>{copiedLink ? 'Copied to clipboard!' : 'Copy invite link'}</span>
+              </button>
+              <button className="menu-item danger" onClick={onLeaveRoom}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                <span>Leave room</span>
+              </button>
 
+              <div className="menu-divider" />
+
+              {/* Room info */}
+              <div className="menu-row">
+                <span className="menu-row-label">Room ID</span>
+                <span className="room-code-display">{roomCode}</span>
+              </div>
               {/* PIN — hidden for invite-joined users, who never receive the passcode */}
               {passcode && (
-              <div className="settings-section">
-                <div className="room-info-row">
-                  <label className="settings-label">PIN</label>
+                <div className="menu-row">
+                  <span className="menu-row-label">PIN</span>
                   <div className="pin-field">
-                    <span className="pin-value">{showPin ? passcode : '••••'}</span>
+                    <span className="pin-value">{showPin ? passcode : '•'.repeat(passcode.length)}</span>
                     <button
                       className="pin-toggle"
                       onClick={() => setShowPin((v) => !v)}
@@ -229,69 +223,60 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
                     </button>
                   </div>
                 </div>
-              </div>
               )}
 
-              {/* Export / Import Board */}
-              <div className="settings-section">
-                <label className="settings-label">Board Data</label>
-                <div className="board-data-actions">
-                  <button className="board-data-btn" onClick={onExport} title="Export board as JSON">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    <span>Export</span>
-                  </button>
-                  <label className="board-data-btn import-label" title="Import board from JSON" tabIndex={0}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="17 8 12 3 7 8" />
-                      <line x1="12" y1="3" x2="12" y2="15" />
-                    </svg>
-                    <span>Import</span>
-                    <input
-                      type="file"
-                      accept=".json"
-                      style={{ display: 'none' }}
-                      onChange={(e) => {
-                        if (e.target.files[0] && onImport) {
-                          onImport(e.target.files[0])
-                          e.target.value = ''
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              {/* Share Invite */}
-              <div className="settings-section">
-                <button className={`share-btn ${copiedLink ? 'copied' : ''}`} onClick={handleShareLink}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="18" cy="5" r="3"></circle>
-                    <circle cx="6" cy="12" r="3"></circle>
-                    <circle cx="18" cy="19" r="3"></circle>
-                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                  </svg>
-                  <span>{copiedLink ? 'Copied to Clipboard!' : 'Copy Invite Link'}</span>
-                </button>
-              </div>
-
-              {/* Leave Room */}
-              <div className="settings-section settings-footer">
-                 <button className="leave-btn" onClick={onLeaveRoom}>
-                  Leave
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                </button>
-              </div>
+              <div className="menu-divider" />
             </>
+          )}
+
+          {/* Preferences */}
+          <div className="prefs-block">
+            <label className="prefs-label">Display name</label>
+            <input
+              className="settings-input"
+              type="text"
+              value={onUsernameChange ? localUsername : (username || '')}
+              onChange={onUsernameChange ? (e) => setLocalUsername(e.target.value) : undefined}
+              readOnly={!onUsernameChange}
+              placeholder="Username"
+              maxLength={24}
+              title={onUsernameChange ? undefined : 'Display name is set at join time'}
+            />
+          </div>
+
+          <div className="menu-row">
+            <span className="menu-row-label">Theme</span>
+            <div className="theme-toggle">
+              {THEME_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  className={`theme-btn ${theme === opt.id ? 'active' : ''}`}
+                  onClick={() => handleThemeChange(opt.id)}
+                  title={opt.label}
+                >
+                  {opt.icon}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Canvas background — swatches adapt to current theme.
+              Only shown where a canvas actually consumes it. */}
+          {onBgChange && (
+            <div className="prefs-block">
+              <label className="prefs-label">Canvas background</label>
+              <div className="bg-swatches">
+                {BG_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    className={`bg-swatch ${activeBgId === preset.id ? 'active' : ''}`}
+                    style={{ background: preset[effectiveTheme] }}
+                    onClick={() => handleBgSelect(preset)}
+                    title={preset.id}
+                  />
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}

@@ -1,5 +1,6 @@
 import { createRoomService, getRoom, updateRoomService } from '../services/room.service.js';
 import { generateRoomToken, generateInviteToken, verifyInviteToken } from '../services/token.service.js';
+import { isRoomLocked, recordFailure, clearFailures } from '../utils/joinLimiter.js';
 
 export async function createRoom(req, res) {
     try {
@@ -28,9 +29,16 @@ export async function createRoom(req, res) {
 }
 
 export async function joinRoom(req, res) {
+    const { code, passcode } = req.body || {};
     try {
-        const { code, passcode } = req.body || {};
+        // Per-room failure budget, shared with the socket join path (the limiter
+        // normalizes the code, so both paths hit the same bucket).
+        if (isRoomLocked(code)) {
+            return res.status(429).json({ success: false, message: 'Too many join attempts. Please try again later.' });
+        }
+
         const room = await getRoom({ code, passcode });
+        clearFailures(code);
 
         const token = generateRoomToken(room.code, 'member');
 
@@ -42,6 +50,7 @@ export async function joinRoom(req, res) {
         });
     } catch (error) {
         if (error.statusCode) {
+            if (error.statusCode === 401) recordFailure(code);
             return res.status(error.statusCode).json({ success: false, message: error.message });
         }
 

@@ -26,6 +26,9 @@ export default function useInfiniteCanvas(activeTool = 'select') {
       height: containerRef.current.offsetHeight,
       isDrawingMode: true,
       selection: true,
+      // Pointer events (not mouse events) so the brush can read the
+      // coalesced pointer stream for smooth fast strokes
+      enablePointerEvents: true,
       // Stroke-only hit detection: check actual pixels, not bounding box
       perPixelTargetFind: true,
       // Hit tolerance in px — user doesn't need pixel-perfect aim on thin strokes

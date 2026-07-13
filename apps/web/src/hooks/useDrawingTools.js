@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import * as fabric from 'fabric'
+import SmoothPencilBrush from '../utils/smoothPencilBrush'
 
 const hexToRgba = (hex, opacity) => {
   if (!hex) return `rgba(0, 0, 0, ${opacity})`
@@ -54,8 +55,8 @@ export default function useDrawingTools(
     // --- Pen tool setup ---
     if (activeTool === 'pen') {
       fabricCanvas.isDrawingMode = true
-      if (!fabricCanvas.freeDrawingBrush) {
-        fabricCanvas.freeDrawingBrush = new fabric.PencilBrush(fabricCanvas)
+      if (!(fabricCanvas.freeDrawingBrush instanceof SmoothPencilBrush)) {
+        fabricCanvas.freeDrawingBrush = new SmoothPencilBrush(fabricCanvas)
       }
       fabricCanvas.freeDrawingBrush.color = colorWithOpacity
       fabricCanvas.freeDrawingBrush.width = strokeWidth || 5

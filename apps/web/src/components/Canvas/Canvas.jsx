@@ -1,11 +1,13 @@
 import useInfiniteCanvas from '../../hooks/useInfiniteCanvas'
 import useCanvasSync from '../../hooks/useCanvasSync'
+import useLiveStrokes from '../../hooks/useLiveStrokes'
 import useDrawingTools from '../../hooks/useDrawingTools'
 import useRemoteCursors from '../../hooks/useRemoteCursors'
 import useHistory from '../../hooks/useHistory'
 import useImagePasting from '../../hooks/useImagePasting'
 
-import { useRef, useImperativeHandle, forwardRef } from 'react'
+import { useRef, useImperativeHandle, forwardRef, useState, useEffect } from 'react'
+import { getCanvasStyle } from '../../utils/theme'
 import './Canvas.css'
 
 const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth, strokeOpacity, strokeStyle, roomCode, username, isConnected, canvasBgColor, canvasBgId, onBgColorChange, syncState: externalSyncState }, ref) => {
@@ -14,8 +16,20 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
   const syncState = externalSyncState || internalSyncState
   const screenShareLayerRef = useRef(null)
 
+  // Canvas background pattern (dots/grid/none) — device-local preference,
+  // broadcast from SettingsPanel via a window event (no prop drilling)
+  const [canvasStyle, setCanvasStyle] = useState(getCanvasStyle)
+  useEffect(() => {
+    const handler = (e) => setCanvasStyle(e.detail)
+    window.addEventListener('evodraw:canvas_style', handler)
+    return () => window.removeEventListener('evodraw:canvas_style', handler)
+  }, [])
+
   // Real-time sync: serialize canvas ops ↔ socket
   useCanvasSync(fabricCanvas, syncState, roomCode, isConnected, canvasBgColor, canvasBgId, onBgColorChange)
+
+  // Live in-progress stroke previews (send + receive)
+  useLiveStrokes(fabricCanvas, roomCode, isConnected)
 
   // Undo/Redo tracking
   const { undo, redo } = useHistory(fabricCanvas, syncState)
@@ -48,7 +62,7 @@ const Canvas = forwardRef(({ activeTool, onToolSelect, strokeColor, strokeWidth,
   return (
     <div className="evodraw-canvas-area" ref={containerRef} onContextMenu={(e) => e.preventDefault()}>
       <div
-        className="canvas-dot-grid"
+        className={`canvas-dot-grid canvas-style-${canvasStyle}`}
         style={canvasBgColor ? { backgroundColor: canvasBgColor } : undefined}
       />
       <div className="screen-share-layer" ref={screenShareLayerRef} />

@@ -14,11 +14,43 @@ const AUTHORITATIVE = process.env.AUTHORITATIVE_SYNC !== 'false';
 
 // ─── Handler Functions ────────────────────────────────────────────────────────
 
-// draw event payload: { roomCode, stroke: { id, type, points, color, width, ... } }
-function onDrawStroke(socket, payload) {
+// Bounds for live in-progress stroke previews (small, high-frequency payloads).
+const MAX_STROKE_ID_LENGTH = 64;
+const MAX_STROKE_POINTS_PER_BATCH = 256;
+const MAX_STROKE_BYTES = 32_768;
+
+// Live in-progress stroke preview relay (ephemeral — never persisted).
+// Expected payload: { roomCode, stroke: { id, points: [[x,y],...], style } }
+function onStrokeProgress(socket, payload) {
     const roomCode = readRoomCode(payload);
     try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
-    socket.to(roomCode).emit('draw_stroke_received', payload.stroke);
+
+    const stroke = payload?.stroke;
+    if (
+        !stroke ||
+        typeof stroke.id !== 'string' ||
+        stroke.id.length === 0 ||
+        stroke.id.length > MAX_STROKE_ID_LENGTH ||
+        !Array.isArray(stroke.points) ||
+        stroke.points.length > MAX_STROKE_POINTS_PER_BATCH ||
+        JSON.stringify(stroke).length > MAX_STROKE_BYTES
+    ) return;
+
+    // Track active strokes so previews can be cleaned up if the drawer
+    // disconnects mid-stroke (see the 'disconnecting' handler below).
+    (socket.data.activeStrokes ??= new Set()).add(stroke.id);
+    socket.to(roomCode).emit('stroke_progress_received', { stroke });
+    markRoomActivity(roomCode);
+}
+
+// Expected payload: { roomCode, strokeId }
+function onStrokeEnd(socket, payload) {
+    const roomCode = readRoomCode(payload);
+    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    const strokeId = payload?.strokeId;
+    if (typeof strokeId !== 'string' || strokeId.length > MAX_STROKE_ID_LENGTH) return;
+    socket.data.activeStrokes?.delete(strokeId);
+    socket.to(roomCode).emit('stroke_end_received', { strokeId });
     markRoomActivity(roomCode);
 }
 
@@ -176,7 +208,8 @@ function onCanvasStateResponse(io, socket, { requesterId, snapshot }) {
 // ─── Register Handlers ────────────────────────────────────────────────────────
 
 export const registerDrawHandlers = (io, socket) => {
-    socket.on('draw_stroke',           (payload) => onDrawStroke(socket, payload));
+    socket.on('stroke_progress',       (payload) => onStrokeProgress(socket, payload));
+    socket.on('stroke_end',            (payload) => onStrokeEnd(socket, payload));
     socket.on('cursor_move',           (payload) => onCursorMove(socket, payload));
     socket.on('canvas_op',             (payload) => onCanvasOp(socket, payload));
     socket.on('canvas_bg_change',      (payload) => onCanvasBgChange(socket, payload));
@@ -184,4 +217,15 @@ export const registerDrawHandlers = (io, socket) => {
     socket.on('request_snapshot',      (data)    => onRequestSnapshot(io, socket, data));
     socket.on('canvas_state_request',  (data)    => onCanvasStateRequest(socket, data));
     socket.on('canvas_state_response', (data)    => onCanvasStateResponse(io, socket, data));
+
+    // End any in-progress stroke previews when the drawer's socket dies
+    // mid-stroke, so peers don't keep stale preview polylines around.
+    socket.on('disconnecting', () => {
+        const roomCode = socket.data.auth?.roomCode;
+        if (!roomCode || !socket.data.activeStrokes?.size) return;
+        for (const strokeId of socket.data.activeStrokes) {
+            socket.to(roomCode).emit('stroke_end_received', { strokeId });
+        }
+        socket.data.activeStrokes.clear();
+    });
 };

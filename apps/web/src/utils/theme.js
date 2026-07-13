@@ -22,3 +22,16 @@ export function applyTheme(themeId) {
   document.documentElement.setAttribute('data-theme', themeId)
   localStorage.setItem('evodraw_theme', themeId)
 }
+
+// Canvas background pattern — a per-device preference (not room-synced)
+export const CANVAS_STYLES = ['dots', 'grid', 'none']
+
+export function getCanvasStyle() {
+  const v = localStorage.getItem('evodraw_canvas_style')
+  return CANVAS_STYLES.includes(v) ? v : 'dots'
+}
+
+export function applyCanvasStyle(style) {
+  localStorage.setItem('evodraw_canvas_style', style)
+  window.dispatchEvent(new CustomEvent('evodraw:canvas_style', { detail: style }))
+}

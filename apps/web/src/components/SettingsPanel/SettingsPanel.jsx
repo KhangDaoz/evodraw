@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createInvite } from '../../services/api'
-import { BG_PRESETS, resolveTheme, applyTheme } from '../../utils/theme'
+import { BG_PRESETS, resolveTheme, applyTheme, getCanvasStyle, applyCanvasStyle } from '../../utils/theme'
 import './SettingsPanel.css'
 
 const THEME_OPTIONS = [
@@ -35,10 +35,54 @@ const THEME_OPTIONS = [
   },
 ]
 
+const CANVAS_STYLE_OPTIONS = [
+  {
+    id: 'dots',
+    label: 'Dots',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <circle cx="5" cy="5" r="1.6" />
+        <circle cx="12" cy="5" r="1.6" />
+        <circle cx="19" cy="5" r="1.6" />
+        <circle cx="5" cy="12" r="1.6" />
+        <circle cx="12" cy="12" r="1.6" />
+        <circle cx="19" cy="12" r="1.6" />
+        <circle cx="5" cy="19" r="1.6" />
+        <circle cx="12" cy="19" r="1.6" />
+        <circle cx="19" cy="19" r="1.6" />
+      </svg>
+    ),
+  },
+  {
+    id: 'grid',
+    label: 'Grid',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <rect x="3" y="3" width="18" height="18" rx="1" />
+        <line x1="9" y1="3" x2="9" y2="21" />
+        <line x1="15" y1="3" x2="15" y2="21" />
+        <line x1="3" y1="9" x2="21" y2="9" />
+        <line x1="3" y1="15" x2="21" y2="15" />
+      </svg>
+    ),
+  },
+  {
+    id: 'none',
+    label: 'None',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <circle cx="12" cy="12" r="9" />
+        <line x1="5.6" y1="5.6" x2="18.4" y2="18.4" />
+      </svg>
+    ),
+  },
+]
+
 export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, username, onUsernameChange, canvasBgId, onBgChange, onExport, onImport }) {
   const [isOpen, setIsOpen] = useState(false)
   const [localUsername, setLocalUsername] = useState(username || 'Username')
   const [theme, setTheme] = useState(() => localStorage.getItem('evodraw_theme') || 'light')
+  const [canvasStyle, setCanvasStyle] = useState(getCanvasStyle)
   const [showPin, setShowPin] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
   const panelRef = useRef(null)
@@ -252,6 +296,26 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
                   key={opt.id}
                   className={`theme-btn ${theme === opt.id ? 'active' : ''}`}
                   onClick={() => handleThemeChange(opt.id)}
+                  title={opt.label}
+                >
+                  {opt.icon}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Canvas style — device-local preference, available everywhere */}
+          <div className="menu-row">
+            <span className="menu-row-label">Canvas style</span>
+            <div className="theme-toggle">
+              {CANVAS_STYLE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  className={`theme-btn ${canvasStyle === opt.id ? 'active' : ''}`}
+                  onClick={() => {
+                    setCanvasStyle(opt.id)
+                    applyCanvasStyle(opt.id)
+                  }}
                   title={opt.label}
                 >
                   {opt.icon}

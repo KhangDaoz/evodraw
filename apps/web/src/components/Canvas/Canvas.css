@@ -32,6 +32,29 @@
   transition: background-color 0.3s ease;
 }
 
+/* Grid variant — lines instead of dots, same fractal spacing/pan vars */
+.canvas-dot-grid.canvas-style-grid {
+  background-image:
+    linear-gradient(to right, var(--dot-color-sub) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--dot-color-sub) 1px, transparent 1px),
+    linear-gradient(to right, var(--dot-color-main) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--dot-color-main) 1px, transparent 1px);
+  background-size:
+    var(--spacing-sub) var(--spacing-sub),
+    var(--spacing-sub) var(--spacing-sub),
+    var(--spacing-main) var(--spacing-main),
+    var(--spacing-main) var(--spacing-main);
+  background-position:
+    var(--pan-x) var(--pan-y),
+    var(--pan-x) var(--pan-y),
+    var(--pan-x) var(--pan-y),
+    var(--pan-x) var(--pan-y);
+}
+
+.canvas-dot-grid.canvas-style-none {
+  background-image: none;
+}
+
 /* Dark theme dot colors */
 [data-theme="dark"] .canvas-dot-grid {
   --dot-color-main: rgba(90, 90, 100, 1);
@@ -42,6 +65,22 @@
   [data-theme="system"] .canvas-dot-grid {
     --dot-color-main: rgba(90, 90, 100, 1);
     --dot-color-sub: rgba(90, 90, 100, var(--sub-opacity, 0));
+  }
+}
+
+/* Full-opacity 1px lines read heavier than dots — soften them.
+   Placed after the theme rules so the override wins in every theme. */
+.canvas-dot-grid.canvas-style-grid {
+  --dot-color-main: rgba(180, 180, 190, 0.55);
+}
+
+[data-theme="dark"] .canvas-dot-grid.canvas-style-grid {
+  --dot-color-main: rgba(90, 90, 100, 0.7);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] .canvas-dot-grid.canvas-style-grid {
+    --dot-color-main: rgba(90, 90, 100, 0.7);
   }
 }
 

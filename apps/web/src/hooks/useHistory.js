@@ -25,7 +25,7 @@ export default function useHistory(canvas, syncState) {
 
     const onAdded = ({ target }) => {
       // Ignore intermediate components of complex shapes that are still drawing
-      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading) return
+      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading || target._evoLivePreview) return
       
       // Ensure target has an ID if another listener hasn't added it yet
       if (!target._evoId) {
@@ -40,7 +40,7 @@ export default function useHistory(canvas, syncState) {
     }
 
     const onRemoved = ({ target }) => {
-      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading) return
+      if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading || target._evoLivePreview) return
       saveState({
         type: 'remove',
         id: target._evoId,

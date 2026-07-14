@@ -13,8 +13,14 @@ import { loadRoomDoc, persistRoomDoc, TOMBSTONE_TTL_MS } from './room.service.js
 
 const FLUSH_INTERVAL_MS = Number(process.env.ROOMDOC_FLUSH_INTERVAL_MS || 10_000);
 const MAX_DOC_ELEMENTS = 100_000; // mirror MAX_SNAPSHOT_ELEMENTS bound
+// MongoDB hard-caps a document at 16 MB. The element-count bound alone doesn't
+// protect it (ops may be up to MAX_OP_BYTES each), and a doc that grows past the
+// cap can never be flushed again: room.save() throws, the doc stays dirty, and
+// every edit since the last successful flush is lost on restart. Stop accepting
+// growth below the cap instead, leaving headroom for tombstones + BSON overhead.
+const MAX_DOC_BYTES = Number(process.env.ROOMDOC_MAX_BYTES || 12_000_000);
 
-/** @typedef {{ elements: Map<string, object>, tombstones: Map<string, number>, seq: number, dirty: boolean, hydrating: Promise<void>|null, pendingEvict: boolean }} RoomDoc */
+/** @typedef {{ elements: Map<string, object>, sizes: Map<string, number>, bytes: number, tombstones: Map<string, number>, seq: number, dirty: boolean, hydrating: Promise<void>|null, pendingEvict: boolean }} RoomDoc */
 
 /** @type {Map<string, RoomDoc>} */
 const rooms = new Map();
@@ -47,7 +53,7 @@ export async function getRoomDoc(code) {
         return doc;
     }
 
-    doc = { elements: new Map(), tombstones: new Map(), seq: 0, dirty: false, hydrating: null, pendingEvict: false };
+    doc = { elements: new Map(), sizes: new Map(), bytes: 0, tombstones: new Map(), seq: 0, dirty: false, hydrating: null, pendingEvict: false };
     rooms.set(key, doc);
 
     // Assigned synchronously (the async IIFE only yields at its first await, which
@@ -58,7 +64,12 @@ export async function getRoomDoc(code) {
             if (loaded) {
                 for (const el of loaded.elements) {
                     const id = getEvoId(el);
-                    if (id) doc.elements.set(id, el);
+                    if (id) {
+                        doc.elements.set(id, el);
+                        const size = JSON.stringify(el).length;
+                        doc.sizes.set(id, size);
+                        doc.bytes += size;
+                    }
                 }
                 for (const t of loaded.tombstones) {
                     if (t && typeof t.id === 'string' && typeof t.deletedAt === 'number') {
@@ -85,9 +96,11 @@ export async function getRoomDoc(code) {
 
 /**
  * Apply one canvas op to the authoritative document.
- * @returns {Promise<{ accepted: boolean, seq: number, broadcastOp?: object, correction?: object }>}
+ * @returns {Promise<{ accepted: boolean, seq: number, broadcastOp?: object, correction?: object, reason?: string }>}
  *   - accepted + broadcastOp: relay this op (the winner) to the other peers.
- *   - correction: the op lost LWW; send this authoritative state back to the sender.
+ *   - correction: the op lost LWW (or hit a tombstone); send this authoritative
+ *     state back to the sender so it converges.
+ *   - reason 'capacity': the board is full (element or byte cap) — tell the user.
  */
 export async function applyOp(code, op) {
     if (!op || typeof op.type !== 'string') return { accepted: false, seq: 0 };
@@ -109,19 +122,38 @@ export async function applyOp(code, op) {
             const id = getEvoId(obj) || (typeof op.id === 'string' ? op.id : null);
             if (!id) return { accepted: false, seq: doc.seq };
 
-            // Dead object — refuse resurrection.
-            if (doc.tombstones.has(id)) return { accepted: false, seq: doc.seq };
+            // Dead object — refuse resurrection, and tell the sender to drop its
+            // local copy (an offline client that missed the delete would otherwise
+            // keep a ghost object whose edits are silently swallowed forever).
+            if (doc.tombstones.has(id)) {
+                return {
+                    accepted: false,
+                    seq: doc.seq,
+                    correction: { type: 'object:removed', id },
+                };
+            }
 
             const existing = doc.elements.get(id) || null;
 
             // Bound total live elements to prevent memory-exhaustion via new ids.
             if (!existing && doc.elements.size >= MAX_DOC_ELEMENTS) {
                 console.warn(`[RoomDoc] Element cap reached for ${normalize(code)} — dropping new object`);
-                return { accepted: false, seq: doc.seq };
+                return { accepted: false, seq: doc.seq, reason: 'capacity' };
+            }
+
+            // Bound total bytes so the persisted doc can never exceed MongoDB's
+            // 16 MB cap (which would make this room permanently unflushable).
+            const size = JSON.stringify(obj).length;
+            const prevSize = doc.sizes.get(id) || 0;
+            if (doc.bytes - prevSize + size > MAX_DOC_BYTES) {
+                console.warn(`[RoomDoc] Byte cap reached for ${normalize(code)} — dropping object ${id}`);
+                return { accepted: false, seq: doc.seq, reason: 'capacity' };
             }
 
             if (shouldAcceptRemote(existing, obj)) {
                 doc.elements.set(id, obj);
+                doc.sizes.set(id, size);
+                doc.bytes += size - prevSize;
                 doc.dirty = true;
                 doc.seq += 1;
                 return { accepted: true, seq: doc.seq, broadcastOp: op };
@@ -141,6 +173,8 @@ export async function applyOp(code, op) {
 
             doc.tombstones.set(id, now);
             doc.elements.delete(id);
+            doc.bytes -= doc.sizes.get(id) || 0;
+            doc.sizes.delete(id);
             // Always persist the tombstone — a remove can race ahead of its add
             // (or target an element another instance holds), and an unpersisted
             // tombstone would let the object resurrect after a restart.
@@ -154,10 +188,16 @@ export async function applyOp(code, op) {
     }
 }
 
-/** Full authoritative state for a late joiner / resync. */
+/** Full authoritative state for a late joiner / resync. Tombstone ids are
+ * included so a reconnecting client can prune objects deleted while it was
+ * offline (its merge is add-only and would otherwise keep them as ghosts). */
 export async function getSnapshot(code) {
     const doc = await getRoomDoc(code);
-    return { elements: Array.from(doc.elements.values()), seq: doc.seq };
+    return {
+        elements: Array.from(doc.elements.values()),
+        tombstones: Array.from(doc.tombstones.keys()),
+        seq: doc.seq,
+    };
 }
 
 /**
@@ -184,6 +224,16 @@ export async function flushRoom(code) {
             // Room was TTL-deleted from the DB — drop the orphaned in-memory doc.
             rooms.delete(key);
             return true;
+        }
+        // A doc past MongoDB's 16 MB cap can never flush; MAX_DOC_BYTES should
+        // prevent this, so if it fires the bound is mis-tuned. Call it out loudly:
+        // every edit since the last good flush is at risk.
+        if (/document.*too large|BSONObj|17419/i.test(err.message)) {
+            console.error(
+                `[RoomDoc] Flush failed for ${key}: document exceeds MongoDB's size limit ` +
+                `(${doc.bytes} tracked bytes). Edits cannot be persisted — lower ROOMDOC_MAX_BYTES.`,
+            );
+            return false;
         }
         console.error(`[RoomDoc] Flush failed for ${key}:`, err.message);
         return false;

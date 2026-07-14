@@ -1,20 +1,37 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
 import { verifyRoomAccess } from '../services/room.service.js';
+import { generateRoomToken } from '../services/token.service.js';
 import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 import { evictRoom } from '../services/roomDocument.js';
 import { isRoomLocked, recordFailure, clearFailures } from '../utils/joinLimiter.js';
 import { getSocketClientIp } from '../utils/clientIp.js';
+import { allowEvent } from '../utils/eventRateLimiter.js';
 
-// In-memory brute-force guard for socket joins, keyed on client IP.
-// Mirrors the REST joinRateLimiter; resets on restart (acceptable, like other in-memory state).
+// Usernames are broadcast to the whole room and stored on socket.data — bound them.
+const MAX_USERNAME_LENGTH = 64;
+
+// In-memory brute-force guard for PASSCODE-path socket joins, keyed on client IP.
+// Mirrors the REST joinRateLimiter; resets on restart (acceptable, like other
+// in-memory state). Token-authorized (re)joins never consume this budget — they
+// are already authenticated, and counting them locked out NAT'd sites (one IP,
+// many users) whenever a reconnect storm pushed them past the cap.
 const JOIN_WINDOW_MS = 5 * 60 * 1000;
 const JOIN_MAX_ATTEMPTS = 20;
+const JOIN_MAX_ENTRIES = 10_000;
 const joinAttempts = new Map(); // ip -> { count, resetAt }
 
 function isJoinBlocked(ip) {
     const now = Date.now();
     const entry = joinAttempts.get(ip);
     if (!entry || now > entry.resetAt) {
+        // Bound the Map under IP churn: purge expired entries before inserting a new
+        // one (mirrors utils/joinLimiter.js). Still full of live entries → don't grow.
+        if (joinAttempts.size >= JOIN_MAX_ENTRIES) {
+            for (const [k, v] of joinAttempts) {
+                if (now > v.resetAt) joinAttempts.delete(k);
+            }
+            if (joinAttempts.size >= JOIN_MAX_ENTRIES) return false;
+        }
         joinAttempts.set(ip, { count: 1, resetAt: now + JOIN_WINDOW_MS });
         return false;
     }
@@ -25,15 +42,10 @@ function isJoinBlocked(ip) {
 async function joinRoom(io, socket, payload) {
     const rawCode = readRoomCode(payload);
     const roomCode = typeof rawCode === 'string' ? rawCode.trim() : '';
-    const username = typeof payload?.username === 'string' ? payload.username.trim() : '';
+    const username = typeof payload?.username === 'string'
+        ? payload.username.trim().slice(0, MAX_USERNAME_LENGTH)
+        : '';
     const passcode = typeof payload?.passcode === 'string' ? payload.passcode.trim() : '';
-
-    // Behind a proxy the raw handshake address is the proxy's, which would lump every
-    // client into one bucket — resolve the forwarded client IP instead.
-    if (isJoinBlocked(getSocketClientIp(socket))) {
-        socket.emit('room_error', { message: 'Too many join attempts. Please try again later.' });
-        return;
-    }
 
     // If the socket's JWT already authorizes this room, trust it and skip the
     // redundant passcode re-check. The token is only issued after a passcode check
@@ -44,6 +56,14 @@ async function joinRoom(io, socket, payload) {
     try { ensureAuthorizedRoom(socket, roomCode); tokenAuthorizes = true; } catch (e) { tokenAuthorizes = false; }
 
     if (!tokenAuthorizes) {
+        // Per-IP budget guards the passcode path only. Behind a proxy the raw handshake
+        // address is the proxy's, which would lump every client into one bucket —
+        // resolve the forwarded client IP instead.
+        if (isJoinBlocked(getSocketClientIp(socket))) {
+            socket.emit('room_error', { message: 'Too many join attempts. Please try again later.' });
+            return;
+        }
+
         // Fallback for any client whose token doesn't match: verify the passcode.
         // 4-6 chars is transitional (legacy 4-digit rooms TTL out within 24h).
         if (!roomCode || roomCode.length !== 6 || !passcode || !/^[A-Za-z0-9]{4,6}$/.test(passcode)) {
@@ -118,9 +138,11 @@ async function evictIfEmpty(io, roomCode) {
 
 function updateUsername(io, socket, payload) {
     const roomCode = readRoomCode(payload);
-    const newUsername = payload?.newUsername;
-    if (!roomCode || !newUsername) return;
+    const raw = payload?.newUsername;
+    if (!roomCode || typeof raw !== 'string' || raw.trim().length === 0) return;
+    const newUsername = raw.trim().slice(0, MAX_USERNAME_LENGTH);
     try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!allowEvent(socket, 'update_username', { capacity: 5, refillPerSec: 0.5 })) return;
 
     const oldUsername = socket.data.username;
     socket.data.username = newUsername;
@@ -144,13 +166,18 @@ function joinRoomOverlay(io, socket, payload) {
 
     socket.join(roomCode);
     socket.data.roomCode = roomCode;
-    socket.data.username = username || 'Presenter';
+    socket.data.username = typeof username === 'string' && username.trim()
+        ? username.trim().slice(0, MAX_USERNAME_LENGTH)
+        : 'Presenter';
     socket.data.isOverlay = true;
 
     console.log(`[Overlay] ${socket.data.username} joined room ${roomCode} via overlay`);
     markRoomActivity(roomCode, { force: true });
 
-    socket.emit('room_joined', { roomCode });
+    // Hand back a normal member token. The overlay arrived with a short-lived
+    // deep-link token (minutes); without this swap the desktop could not reconnect
+    // once it expired, since the deep link is a one-shot credential.
+    socket.emit('room_joined', { roomCode, token: generateRoomToken(roomCode, 'member') });
     socket.to(roomCode).emit('user_joined', { username: socket.data.username, roomCode, socketId: socket.id });
     broadcastRoomUsers(io, roomCode);
 }
@@ -158,7 +185,9 @@ function joinRoomOverlay(io, socket, payload) {
 function onOverlayReady(socket, payload) {
     const roomCode = readRoomCode(payload);
     const shareId = payload?.shareId;
-    if (!roomCode || !shareId) return;
+    if (!roomCode || typeof shareId !== 'string' || shareId.length > 64) return;
+    // The one relay that used to trust payload.roomCode without an auth check.
+    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
     socket.to(roomCode).emit('overlay:ready', { shareId });
 }
 

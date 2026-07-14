@@ -1,17 +1,28 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
 import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 
+// Bounds for relayed share metadata (fanned out to every room member).
+const MAX_SHARE_ID_LENGTH = 64;
+const MAX_DISPLAY_SURFACE_LENGTH = 32;
+// A presenter shares one or two surfaces; the cap only stops a client from
+// growing the shares Map without bound by inventing unique shareIds.
+const MAX_SHARES_PER_SOCKET = 10;
+
 // Presenter starts sharing
 // Expected payload: { roomCode: string, shareId: string, displaySurface?: string }
 const handleScreenStart = (io, socket) => (payload) => {
     const roomCode = readRoomCode(payload);
-    const { shareId, displaySurface } = payload || {};
-    if (!roomCode || !shareId) return;
+    const { shareId } = payload || {};
+    if (!roomCode || typeof shareId !== 'string' || shareId.length === 0 || shareId.length > MAX_SHARE_ID_LENGTH) return;
+    const displaySurface = typeof payload?.displaySurface === 'string'
+        ? payload.displaySurface.slice(0, MAX_DISPLAY_SURFACE_LENGTH)
+        : undefined;
     try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
 
     const username = socket.data.username || 'Anonymous';
 
     if (!socket.data.shares) socket.data.shares = new Map();
+    if (socket.data.shares.size >= MAX_SHARES_PER_SOCKET && !socket.data.shares.has(shareId)) return;
     socket.data.shares.set(shareId, { displaySurface });
 
     console.log(`[Screen] ${username} started sharing (${shareId}) in room ${roomCode}`);
@@ -31,7 +42,7 @@ const handleScreenStart = (io, socket) => (payload) => {
 const handleScreenStop = (io, socket) => (payload) => {
     const roomCode = readRoomCode(payload);
     const { shareId } = payload || {};
-    if (!roomCode || !shareId) return;
+    if (!roomCode || typeof shareId !== 'string' || shareId.length > MAX_SHARE_ID_LENGTH) return;
     try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
 
     if (socket.data.shares) {

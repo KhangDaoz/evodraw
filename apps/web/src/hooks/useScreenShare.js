@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { RoomEvent, Track } from 'livekit-client'
 import { getSocket } from '../services/socket'
+import { createOverlayToken } from '../services/api'
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000'
 import {
@@ -238,7 +239,19 @@ export default function useScreenShare(roomCode, username, isConnected, fabricCa
 
         // Precompute the deep link URL so the "Open in EvoDraw" banner button
         // can fire it as a clean, synchronous user gesture with no awaits.
-        const token = localStorage.getItem('token')
+        //
+        // Mint a SHORT-LIVED token for the URL rather than embedding the 24h room
+        // token: the deep link is handed to the OS protocol handler and shows up in
+        // the launched process's command line, where any local process can read it.
+        // If minting fails the overlay simply isn't offered — never fall back to the
+        // long-lived token.
+        let token = null
+        try {
+          const res = await createOverlayToken()
+          token = res?.data?.token || null
+        } catch (err) {
+          console.error('[ScreenShare] Failed to mint overlay token', err)
+        }
         let captureX = 0
         let captureY = 0
         if (displaySurface === 'browser') {
@@ -247,9 +260,9 @@ export default function useScreenShare(roomCode, username, isConnected, fabricCa
           captureX = Math.round(window.screenX + (window.outerWidth - window.innerWidth) / 2)
           captureY = Math.round(window.screenY + (window.outerHeight - window.innerHeight))
         }
-        setOverlayReadyUrl(
+        if (token) setOverlayReadyUrl(
           `evodraw://start?room=${encodeURIComponent(roomCode)}` +
-          `&token=${encodeURIComponent(token || '')}` +
+          `&token=${encodeURIComponent(token)}` +
           `&server=${encodeURIComponent(SERVER_URL)}` +
           `&shareId=${encodeURIComponent(shareId)}` +
           `&username=${encodeURIComponent(usernameRef.current)}` +

@@ -85,6 +85,11 @@ app.on('open-url', (_event, url) => {
   handleDeepLink(url);
 });
 
+const toInt = (raw) => {
+  const n = parseInt(raw || '0', 10);
+  return Number.isFinite(n) ? n : 0;
+};
+
 function handleDeepLink(url) {
   try {
     const parsed = new URL(url);
@@ -96,8 +101,9 @@ function handleDeepLink(url) {
       shareId: parsed.searchParams.get('shareId'),
       username: parsed.searchParams.get('username'),
       displaySurface: parsed.searchParams.get('displaySurface') || 'monitor',
-      captureX: parseInt(parsed.searchParams.get('captureX') || '0', 10),
-      captureY: parseInt(parsed.searchParams.get('captureY') || '0', 10),
+      // parseInt returns NaN for junk, which would poison the overlay's viewport math.
+      captureX: toInt(parsed.searchParams.get('captureX')),
+      captureY: toInt(parsed.searchParams.get('captureY')),
     };
 
     console.log('[Main] Deep link received:', params.room, params.shareId);
@@ -277,29 +283,18 @@ function setupIPC() {
 
 // ── App Lifecycle ──
 app.whenReady().then(() => {
+  // Parse a cold-start deep link BEFORE the window exists, so handleDeepLink takes
+  // its pendingDeepLink path (the renderer fetches it via IPC on mount — sending
+  // 'deep-link' to a webContents that hasn't loaded would be dropped). This reuses
+  // the one parser instead of a second copy, which had drifted and silently lost
+  // displaySurface/captureX/captureY — mispositioning every cold-start overlay.
+  const deepLinkUrl = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+  if (deepLinkUrl) handleDeepLink(deepLinkUrl);
+
   createOverlayWindow();
   registerHotkey();
   createTray();
   setupIPC();
-
-  const deepLinkUrl = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
-  if (deepLinkUrl) {
-    // Page isn't loaded yet — store as pending so renderer fetches it on mount
-    try {
-      const parsed = new URL(deepLinkUrl);
-      pendingDeepLink = {
-        room: parsed.searchParams.get('room'),
-        token: parsed.searchParams.get('token'),
-        // Honor the deep link's server only if it's a trusted backend (see resolveServer).
-        server: resolveServer(parsed.searchParams.get('server')),
-        shareId: parsed.searchParams.get('shareId'),
-        username: parsed.searchParams.get('username'),
-      };
-      console.log('[Main] Stored argv deep link as pending:', pendingDeepLink.room);
-    } catch (err) {
-      console.error('[Main] Failed to parse argv deep link:', err);
-    }
-  }
 });
 
 app.on('window-all-closed', () => {

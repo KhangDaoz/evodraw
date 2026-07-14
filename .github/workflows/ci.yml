@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Non-blocking for now: apps/web has 16 PRE-EXISTING eslint errors (unused
+      # vars plus react-hooks rules like set-state-in-effect in RoomPage /
+      # useDrawingTools) that need real refactors, not a rubber stamp. Keep the
+      # signal visible, burn the list down, then delete continue-on-error so lint
+      # gates merges like the steps below.
+      - name: Lint (web)
+        run: npm run lint -w apps/web
+        continue-on-error: true
+
+      - name: Test
+        run: npm test
+
+      - name: Build (web)
+        run: npm run build -w apps/web

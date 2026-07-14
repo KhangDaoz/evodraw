@@ -33,6 +33,20 @@ export function generateInviteToken(roomCode) {
     );
 }
 
+// Overlay tokens are embedded in the `evodraw://` deep link, which transits the OS
+// protocol handler and the launched process's command line — both readable by other
+// local processes. Keep the window small: the desktop redeems it for a normal member
+// token as soon as it joins (see room.handler joinRoomOverlay).
+const OVERLAY_TOKEN_TTL = process.env.OVERLAY_TOKEN_TTL || '10m';
+
+export function generateOverlayToken(roomCode) {
+    return jwt.sign(
+        { roomCode, role: 'member', purpose: 'overlay' },
+        process.env.TOKEN_SECRET,
+        { expiresIn: OVERLAY_TOKEN_TTL }
+    );
+}
+
 // Verify an invite token and return its roomCode. Throws on any invalid/expired
 // token or one not issued as an invite. Error message is uniform so it doesn't
 // leak whether the token was malformed, expired, or the wrong purpose.

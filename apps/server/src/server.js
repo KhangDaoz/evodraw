@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import mongoose from 'mongoose';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
@@ -96,10 +97,30 @@ app.get('/', (req, res) => {
     res.json({ message: 'EvoDraw API Server Operations Normal' });
 });
 
+// Readiness probe: reports unhealthy when MongoDB is unreachable, so a load
+// balancer stops routing here instead of serving requests that will fail.
+app.get('/health', async (req, res) => {
+    const connected = mongoose.connection.readyState === 1;
+    if (!connected) {
+        return res.status(503).json({ status: 'unhealthy', db: 'disconnected' });
+    }
+    try {
+        await mongoose.connection.db.admin().ping();
+        res.json({ status: 'ok', db: 'connected', uptime: Math.round(process.uptime()) });
+    } catch (err) {
+        res.status(503).json({ status: 'unhealthy', db: 'ping failed' });
+    }
+});
+
 // error handling middleware
 app.use((err, req, res, next) => {
     console.error('[Server Error]:', err.message);
-    res.status(err.status || 500).json({ success: false, error: err.message || 'Internal Server Error' });
+    // Don't leak internal error text (stack-adjacent details, driver messages) to
+    // clients in production.
+    const message = IS_PRODUCTION
+        ? 'Internal Server Error'
+        : (err.message || 'Internal Server Error');
+    res.status(err.status || 500).json({ success: false, error: message });
 });
 
 // start server after connecting to database and initializing Firebase

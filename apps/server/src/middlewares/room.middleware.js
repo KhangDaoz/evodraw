@@ -21,26 +21,3 @@ export function validateRoom(req, res, next) {
 
     next();
 }
-
-export function validateUpdateRoom(req, res, next) {
-    const { elements, appState } = req.body || {};
-
-    if (!Array.isArray(elements)) {
-        return res.status(400).json({
-            success: false,
-            message: 'Invalid format: "elements" must be an array.'
-        });
-    }
-
-    if (typeof appState !== 'object' || appState === null) {
-        return res.status(400).json({
-            success: false,
-            message: 'Invalid format: "appState" must be a non-null object.'
-        });
-    }
-
-    // roomVersion is not validated: the server owns versioning (see updateRoomService),
-    // so any client-supplied value is ignored rather than trusted.
-
-    next();
-}

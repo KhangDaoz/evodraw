@@ -83,6 +83,27 @@ export async function redeemInvite(invite) {
 }
 
 /**
+ * Mint a short-lived token to embed in the `evodraw://` desktop deep link.
+ * The long-lived room token must never travel in a URL (it ends up in the OS
+ * protocol handler and the launched process's command line).
+ * Returns { success: true, data: { token } }.
+ */
+export async function createOverlayToken() {
+  const token = localStorage.getItem('token')
+  const res = await fetch(`${BASE_URL}/rooms/overlay-token`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.message || 'Failed to create overlay token')
+  }
+
+  return res.json()
+}
+
+/**
  * Upload a file (image, etc.) to Firebase Storage via the server.
  * Returns { success: true, data: { fileId, url, originalName } }
  */

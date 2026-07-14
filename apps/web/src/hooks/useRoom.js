@@ -63,6 +63,12 @@ export default function useRoom(roomCode, currentUsername, passcode) {
     hasJoined.current = false
   }, [])
 
+  // Non-fatal canvas problems (e.g. the board hit its size cap). Unlike
+  // `room_error` this must NOT disconnect or eject the user — just surface it.
+  const handleCanvasError = useCallback((err) => {
+    setError(err?.message || 'Canvas error')
+  }, [])
+
   const updateUsername = useCallback((newUsername) => {
     usernameRef.current = newUsername
     const socket = getSocket()
@@ -83,6 +89,7 @@ export default function useRoom(roomCode, currentUsername, passcode) {
     socket.on('user_left', handleUserLeft)
     socket.on('room_users', handleRoomUsers)
     socket.on('room_error', handleRoomError)
+    socket.on('canvas_error', handleCanvasError)
 
     // If already connected when hook mounts
     if (socket.connected && !hasJoined.current) {
@@ -102,13 +109,14 @@ export default function useRoom(roomCode, currentUsername, passcode) {
         s.off('user_left', handleUserLeft)
         s.off('room_users', handleRoomUsers)
         s.off('room_error', handleRoomError)
+        s.off('canvas_error', handleCanvasError)
       }
       hasJoined.current = false
       disconnectSocket()
     }
     // Only bind on mount/unmount and static refs/handlers, excluding dynamic values like currentUsername
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomCode, passcode, handleConnect, handleDisconnect, handleConnectError, handleUserJoined, handleUserLeft, handleRoomUsers, handleRoomError])
+  }, [roomCode, passcode, handleConnect, handleDisconnect, handleConnectError, handleUserJoined, handleUserLeft, handleRoomUsers, handleRoomError, handleCanvasError])
 
   return { isConnected, connectedUsers, error, updateUsername }
 }

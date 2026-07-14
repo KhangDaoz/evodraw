@@ -1,5 +1,5 @@
-import { createRoomService, getRoom, updateRoomService } from '../services/room.service.js';
-import { generateRoomToken, generateInviteToken, verifyInviteToken } from '../services/token.service.js';
+import { createRoomService, getRoom } from '../services/room.service.js';
+import { generateRoomToken, generateInviteToken, verifyInviteToken, generateOverlayToken } from '../services/token.service.js';
 import { isRoomLocked, recordFailure, clearFailures } from '../utils/joinLimiter.js';
 
 export async function createRoom(req, res) {
@@ -111,25 +111,20 @@ export async function redeemInvite(req, res) {
     }
 }
 
-export async function updateRoom(req, res) {
+// Mint a short-lived token for the `evodraw://` deep link. The link travels through
+// the OS protocol handler and the target process's command line, so embedding the
+// 24h member token there leaked long-lived room access; this one expires in minutes
+// and the desktop swaps it for a normal member token once it joins.
+export async function createOverlayToken(req, res) {
     try {
-        const { elements, appState, status } = req.body || {};
-        // Use the room code from the verified token instead of the request body
         const roomCode = req.roomCode;
-        // roomVersion is intentionally not forwarded: the server owns versioning
-        // (updateRoomService bumps its own monotonic counter), so a client value is ignored.
-        await updateRoomService({ code: roomCode, elements, appState, status });
-
-        res.status(200).json({
-            success: true,
-            message: 'Room updated successfully',
-        });
-    } catch (error) {
-        if (error.statusCode) {
-            return res.status(error.statusCode).json({ success: false, message: error.message });
+        if (!roomCode) {
+            return res.status(401).json({ success: false, message: 'Unauthorized.' });
         }
-
-        console.error('Update room error:', error);
+        const token = generateOverlayToken(roomCode);
+        res.status(200).json({ success: true, data: { token } });
+    } catch (error) {
+        console.error('Create overlay token error:', error);
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 }

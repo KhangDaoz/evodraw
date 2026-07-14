@@ -31,9 +31,17 @@ export default function useRoom(serverUrl, roomCode, currentUsername) {
     setIsConnected(false);
   }, []);
 
-  const handleRoomJoined = useCallback(() => {
+  const handleRoomJoined = useCallback(({ token } = {}) => {
     setIsConnected(true);
     setError(null);
+    // We arrived with a short-lived deep-link token. The server hands back a normal
+    // member token on join — persist it and swap it onto the live socket so an
+    // automatic reconnect doesn't fail once the deep-link token expires.
+    if (token) {
+      localStorage.setItem('token', token);
+      const socket = getSocket();
+      if (socket) socket.auth = { ...socket.auth, token };
+    }
   }, []);
 
   const handleRoomError = useCallback((err) => {

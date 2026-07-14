@@ -165,6 +165,15 @@ export function attachSerializer(canvas, onOperation, state) {
  * Uses LWW reconciliation: only accepts remote if version is newer.
  */
 export async function applyRemoteOp(canvas, op, state) {
+  // Enliven BEFORE taking the _applying flag: enlivenObjects can await a network
+  // image load, and any LOCAL Fabric mutation fired during that window would be
+  // misread as a remote apply and silently never synced. The flag below wraps
+  // only synchronous canvas mutation.
+  let enlivened = null
+  if (op.type === 'object:added' && !findById(canvas, op.object._evoId)) {
+    enlivened = await deserializeObject(op.object)
+  }
+
   state._applying = true
   let applied = false
   try {
@@ -183,8 +192,8 @@ export async function applyRemoteOp(canvas, op, state) {
           }
           break
         }
-        const obj = await deserializeObject(op.object)
-        canvas.add(obj)
+        if (!enlivened) break
+        canvas.add(enlivened)
         applied = true
         break
       }
@@ -236,11 +245,16 @@ export function serializeCanvas(canvas, { includeScreenShares = false } = {}) {
  * Load a full canvas snapshot (replaces all objects).
  */
 export async function loadCanvasSnapshot(canvas, snapshot, state) {
+  // Enliven everything first (may await image loads) so the _applying flag only
+  // wraps the synchronous clear + add — see the note in applyRemoteOp.
+  const objs = []
+  for (const json of snapshot.objects) {
+    objs.push(await deserializeObject(json))
+  }
   state._applying = true
   try {
     canvas.clear()
-    for (const json of snapshot.objects) {
-      const obj = await deserializeObject(json)
+    for (const obj of objs) {
       canvas.add(obj)
     }
     canvas._evoSceneVersion = typeof snapshot.sceneVersion === 'number' ? snapshot.sceneVersion : 0

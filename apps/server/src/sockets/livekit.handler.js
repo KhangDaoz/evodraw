@@ -8,7 +8,8 @@ import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 const handleGetToken = (io, socket) => async (payload, callback) => {
     try {
         const roomCode = readRoomCode(payload);
-        const username = payload?.username;
+        // Bounded: this becomes the LiveKit participant identity/name.
+        const username = typeof payload?.username === 'string' ? payload.username.slice(0, 64) : undefined;
 
         try { ensureAuthorizedRoom(socket, roomCode); } catch (e) {
             if (callback) callback({ error: 'Unauthorized room access' });

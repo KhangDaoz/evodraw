@@ -2,6 +2,7 @@ import { markRoomActivity } from '../utils/roomActivity.js';
 import { getRoom, updateRoomService } from '../services/room.service.js';
 import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 import { applyOp, getSnapshot } from '../services/roomDocument.js';
+import { allowEvent } from '../utils/eventRateLimiter.js';
 
 // Payload bounds to prevent memory/bandwidth DoS and runaway document growth.
 const MAX_SNAPSHOT_ELEMENTS = 100_000;
@@ -39,6 +40,9 @@ function onStrokeProgress(socket, payload) {
         JSON.stringify(stroke).length > MAX_STROKE_BYTES
     ) return;
 
+    // Client batches at 40 ms (~25/sec); anything past this is a flood.
+    if (!allowEvent(socket, 'stroke_progress', { capacity: 60, refillPerSec: 30 })) return;
+
     // Track active strokes so previews can be cleaned up if the drawer
     // disconnects mid-stroke (see the 'disconnecting' handler below).
     const activeStrokes = (socket.data.activeStrokes ??= new Set());
@@ -70,6 +74,9 @@ function onCursorMove(socket, payload) {
     if (!position || typeof position.x !== 'number' || typeof position.y !== 'number') return;
     const username = typeof payload?.username === 'string' ? payload.username.slice(0, 64) : undefined;
 
+    // Client throttles to 80 ms (~12.5/sec); anything past this is a flood.
+    if (!allowEvent(socket, 'cursor_move', { capacity: 60, refillPerSec: 30 })) return;
+
     socket.to(roomCode).emit('cursor_moved', { position: { x: position.x, y: position.y }, username });
     markRoomActivity(roomCode);
 }
@@ -88,6 +95,9 @@ async function onCanvasOp(socket, payload) {
         return;
     }
 
+    // Generous bound (multi-delete/eraser bursts are legit); stops tight-loop floods.
+    if (!allowEvent(socket, 'canvas_op', { capacity: 300, refillPerSec: 100 })) return;
+
     if (!AUTHORITATIVE) {
         // Legacy pure-relay behavior (kill-switch fallback).
         socket.to(roomCode).emit('canvas_op_received', { op: payload.op });
@@ -99,12 +109,16 @@ async function onCanvasOp(socket, payload) {
         const result = await applyOp(roomCode, payload.op);
         if (result.accepted && result.broadcastOp) {
             socket.to(roomCode).emit('canvas_op_received', { op: result.broadcastOp, seq: result.seq });
-        } else if (result.correction && result.correction.object) {
-            // Sender's edit lost LWW (or targeted a newer object) — send the
-            // authoritative state back so the sender reconciles to it.
+        } else if (result.correction) {
+            // Sender's edit lost LWW or targeted a tombstoned object — send the
+            // authoritative state (or removal) back so the sender reconciles to it.
             socket.emit('canvas_op_received', { op: result.correction, seq: result.seq });
+        } else if (result.reason === 'capacity') {
+            // The board hit its element/byte cap. Silently dropping would leave the
+            // user drawing into the void, so say so. Deliberately NOT `room_error`:
+            // that one means "access denied" to the client and ejects it from the room.
+            socket.emit('canvas_error', { message: 'Board is full — delete something before adding more.' });
         }
-        // Rejected with no correction (tombstoned / capped) → silently dropped.
     } catch (err) {
         console.error(`[CanvasOp] apply failed for room ${roomCode}:`, err.message);
         // Fail open: relay the raw op so an internal error doesn't lose the edit.
@@ -118,10 +132,13 @@ async function onCanvasOp(socket, payload) {
 // Expected payload: { roomCode: string, bgColor: string, bgId?: string }
 function onCanvasBgChange(socket, payload) {
     const roomCode = readRoomCode(payload);
-    if (!roomCode || !payload?.bgColor) return;
+    // A CSS color / preset id is short; anything longer is a fan-out abuse vector.
+    const bgColor = payload?.bgColor;
+    if (!roomCode || typeof bgColor !== 'string' || bgColor.length === 0 || bgColor.length > 64) return;
+    const bgId = typeof payload?.bgId === 'string' && payload.bgId.length <= 64 ? payload.bgId : 'default';
     try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
-    const bgState = { bgColor: payload.bgColor, bgId: payload.bgId || 'default' };
-    socket.to(roomCode).emit('canvas_bg_changed', bgState);
+    if (!allowEvent(socket, 'canvas_bg_change', { capacity: 5, refillPerSec: 0.5 })) return;
+    socket.to(roomCode).emit('canvas_bg_changed', { bgColor, bgId });
     markRoomActivity(roomCode);
 }
 
@@ -163,23 +180,25 @@ async function onRequestSnapshot(io, socket, data) {
     try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
     try {
         if (AUTHORITATIVE) {
-            const { elements, seq } = await getSnapshot(roomCode);
-            socket.emit('snapshot_loaded', { elements, sceneVersion: seq });
+            const { elements, tombstones, seq } = await getSnapshot(roomCode);
+            // `authoritative: true` tells clients the server owns persistence, so
+            // they can skip their (ignored) periodic save_snapshot pushes.
+            socket.emit('snapshot_loaded', { elements, tombstones, sceneVersion: seq, authoritative: true });
         } else {
             const room = await getRoom({ code: roomCode, skipPasscodeCheck: true });
             if (room) {
                 socket.emit('snapshot_loaded', {
                     elements: Array.isArray(room.elements) ? room.elements : [],
                     sceneVersion: typeof room.roomVersion === 'number' ? room.roomVersion : 0,
+                    authoritative: false,
                 });
             }
         }
     } catch (err) {
         console.error(`[Snapshot] Failed to load for room ${roomCode}:`, err.message);
     }
-    // Still ask peers for live-only extras (screen-share rects, bg color) that
-    // never enter the persistent document.
-    socket.to(roomCode).emit('canvas_state_request', { requesterId: socket.id });
+    // Peers are asked for live-only extras (screen-share rects, bg color) by the
+    // client's own canvas_state_request emit; no need to broadcast a second one here.
 }
 
 // Peer-to-peer state sync: new joiner asks existing peers for canvas snapshot

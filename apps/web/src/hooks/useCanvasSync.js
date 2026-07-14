@@ -19,6 +19,9 @@ export default function useCanvasSync(canvas, syncState, roomCode, isConnected, 
   const bgStateRef = useRef({ canvasBgColor, canvasBgId })
   const lastPushedVersionRef = useRef(0)
   const snapshotLoadedRef = useRef(false)
+  // True once the server has told us it owns persistence (authoritative mode);
+  // the periodic save_snapshot push is a no-op there and gets skipped.
+  const serverAuthoritativeRef = useRef(false)
 
   // Keep refs updated so closures see the latest value without re-binding everything
   useEffect(() => {
@@ -55,14 +58,22 @@ export default function useCanvasSync(canvas, syncState, roomCode, isConnected, 
       enqueueApply(() => applyRemoteOp(canvas, op, syncState.current))
 
     // ── Server snapshot recovery (primary) ──
-    const onSnapshotLoaded = ({ elements, sceneVersion }) => enqueueApply(async () => {
+    const onSnapshotLoaded = ({ elements, tombstones, sceneVersion, authoritative }) => enqueueApply(async () => {
       if (!elements) return
+      if (typeof authoritative === 'boolean') serverAuthoritativeRef.current = authoritative
       if (snapshotLoadedRef.current) {
         // Already initialized (e.g. after a reconnect). Merge via LWW instead of
         // a destructive reload, so a stale/older server snapshot can't wipe newer
         // local objects — higher local versions win; only missing ones are added.
         for (const json of elements) {
           await applyRemoteOp(canvas, { type: 'object:added', object: json }, syncState.current)
+        }
+        // The merge is add-only, so deletes that happened while we were offline
+        // must be applied from the server's tombstones or they ghost forever.
+        if (Array.isArray(tombstones)) {
+          for (const id of tombstones) {
+            await applyRemoteOp(canvas, { type: 'object:removed', id }, syncState.current)
+          }
         }
         canvas.requestRenderAll()
         return
@@ -74,9 +85,14 @@ export default function useCanvasSync(canvas, syncState, roomCode, isConnected, 
       console.log(`[Sync] Loaded server snapshot (v${sceneVersion}, ${elements.length} elements)`)
     })
 
-    // ── Peer-to-peer fallback (secondary) ──
+    // ── Peer-to-peer extras (secondary) ──
+    // The authoritative server snapshot is the source of truth for persistent
+    // elements, so peers only contribute what never enters it: screen-share
+    // proxy rects and the background color. Sending the full canvas here made
+    // every joiner receive N full snapshots (one per peer).
     const onStateRequest = ({ requesterId }) => {
       const snapshot = serializeCanvas(canvas, { includeScreenShares: true })
+      snapshot.objects = snapshot.objects.filter((o) => o._evoScreenShare)
       snapshot.bgColor = bgStateRef.current.canvasBgColor || null
       snapshot.bgId = bgStateRef.current.canvasBgId || 'default'
       socket.emit('canvas_state_response', { requesterId, snapshot })
@@ -117,10 +133,13 @@ export default function useCanvasSync(canvas, syncState, roomCode, isConnected, 
     socket.emit('canvas_state_request', { roomCode })
 
     // ── Periodic snapshot push (dirty flag) ──
+    // Legacy (non-authoritative) mode only: the authoritative server ignores
+    // client snapshots entirely, so pushing them is pure wasted bandwidth.
     const pushInterval = setInterval(() => {
       if (!canvas) return
+      if (serverAuthoritativeRef.current) return
       if (!canvas._evoIsDirty) return
-      
+
       const currentVersion = getSceneVersion(canvas)
       if (currentVersion > 0 && currentVersion !== lastPushedVersionRef.current) {
         const { objects } = serializeCanvas(canvas)

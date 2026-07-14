@@ -64,7 +64,12 @@ export async function getRoomDoc(code) {
                 }
             }
         } catch (err) {
+            // Drop the half-hydrated doc so the next access retries. Keeping it
+            // would serve joiners an empty board — and the first op would mark it
+            // dirty, letting a later flush overwrite the persisted elements.
+            rooms.delete(key);
             console.error(`[RoomDoc] Hydration failed for ${key}:`, err.message);
+            throw err;
         } finally {
             doc.hydrating = null;
         }
@@ -132,8 +137,11 @@ export async function applyOp(code, op) {
             if (!id) return { accepted: false, seq: doc.seq };
 
             doc.tombstones.set(id, now);
-            const had = doc.elements.delete(id);
-            if (had) doc.dirty = true; // ephemeral (e.g. screen-share) removals needn't persist
+            doc.elements.delete(id);
+            // Always persist the tombstone — a remove can race ahead of its add
+            // (or target an element another instance holds), and an unpersisted
+            // tombstone would let the object resurrect after a restart.
+            doc.dirty = true;
             doc.seq += 1;
             return { accepted: true, seq: doc.seq, broadcastOp: { type: 'object:removed', id } };
         }

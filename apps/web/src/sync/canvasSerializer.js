@@ -268,8 +268,19 @@ export async function importBoard(canvas, jsonString, syncState) {
     throw new Error('Invalid EvoDraw file format')
   }
 
+  // Imported elements get fresh identities: the file may reuse ids that already
+  // exist in the room — or that were just tombstoned by the pre-import removals
+  // (importing an export of the same board) — and reused ids would lose LWW
+  // reconciliation or be rejected by the server as tombstone resurrections.
+  const elements = data.elements.map((el) => ({
+    ...el,
+    _evoId: `${Date.now()}-${++_idCounter}-${Math.random().toString(36).slice(2, 7)}`,
+    _evoVersion: 1,
+    _evoNonce: Math.floor(Math.random() * 1073741824),
+  }))
+
   const snapshot = {
-    objects: data.elements,
+    objects: elements,
     sceneVersion: (data.sceneVersion || 0) + 1,
   }
 

@@ -62,6 +62,11 @@ async function joinRoom(io, socket, payload) {
                 return;
             }
             clearFailures(roomCode);
+            // The passcode proved access, so re-scope the socket's auth to this
+            // room. Without this, every gated event (canvas_op, chat, cursor…)
+            // still checks the handshake token's room and silently drops — the
+            // user would be in the room but unable to send anything.
+            socket.data.auth = { roomCode, role: 'member' };
         } catch (error) {
             console.error('Socket join_room error:', error);
             socket.emit('room_error', { message: 'Failed to verify room access.' });

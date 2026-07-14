@@ -33,7 +33,10 @@ export function decodeToken(token) {
  */
 export function hasValidRoomToken(roomCode) {
   const decoded = decodeToken(localStorage.getItem(TOKEN_KEY))
-  if (!decoded || !decoded.roomCode) return false
+  // Legacy wire key: tokens issued before the rename carry `roomId` (the server
+  // middleware accepts both the same way).
+  const claimedCode = decoded?.roomCode ?? decoded?.roomId
+  if (!claimedCode) return false
   if (typeof decoded.exp === 'number' && decoded.exp * 1000 <= Date.now()) return false
-  return String(decoded.roomCode).toUpperCase() === String(roomCode || '').toUpperCase()
+  return String(claimedCode).toUpperCase() === String(roomCode || '').toUpperCase()
 }

@@ -4,7 +4,6 @@ import {
   exportBoard,
   importBoard,
   serializeCanvas,
-  getSceneVersion,
 } from '../sync/canvasSerializer'
 
 /**
@@ -50,20 +49,30 @@ export default function useDocumentManager(fabricCanvas, syncState, roomCode) {
     reader.onload = async (e) => {
       try {
         const jsonString = e.target.result
+        const socket = getSocket()
+
+        // Tombstone the pre-import board first: importBoard clears the canvas
+        // while the _applying flag suppresses the serializer, so peers and the
+        // authoritative server would never hear about the removals otherwise —
+        // the old board would resurrect from the server on the next refresh.
+        if (socket && roomCode) {
+          for (const obj of fabricCanvas.getObjects()) {
+            if (obj._evoScreenShare || obj._evoLivePreview || obj._evoUploading || !obj._evoId) continue
+            socket.emit('canvas_op', {
+              roomCode,
+              op: { type: 'object:removed', id: obj._evoId },
+            })
+          }
+        }
+
         await importBoard(fabricCanvas, jsonString, syncState.current)
 
         // ── Sync to peers after import ──
-        const socket = getSocket()
+        // importBoard assigned every element a fresh identity, so these ops are
+        // plain adds for peers/server. No save_snapshot: persistence is
+        // server-owned now (the authoritative server ignores client snapshots).
         if (socket && roomCode) {
           const { objects } = serializeCanvas(fabricCanvas)
-          const sceneVersion = getSceneVersion(fabricCanvas)
-          socket.emit('save_snapshot', {
-            roomCode,
-            elements: objects,
-            sceneVersion,
-          })
-
-          // Emit each element as a canvas_op so peers receive it in realtime
           for (const obj of objects) {
             socket.emit('canvas_op', {
               roomCode,

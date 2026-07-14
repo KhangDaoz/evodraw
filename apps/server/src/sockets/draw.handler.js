@@ -18,6 +18,9 @@ const AUTHORITATIVE = process.env.AUTHORITATIVE_SYNC !== 'false';
 const MAX_STROKE_ID_LENGTH = 64;
 const MAX_STROKE_POINTS_PER_BATCH = 256;
 const MAX_STROKE_BYTES = 32_768;
+// A legit client has ~1 stroke in flight; the cap only stops a client that
+// streams unique ids without ever sending stroke_end from growing the set.
+const MAX_ACTIVE_STROKES = 100;
 
 // Live in-progress stroke preview relay (ephemeral — never persisted).
 // Expected payload: { roomCode, stroke: { id, points: [[x,y],...], style } }
@@ -38,7 +41,9 @@ function onStrokeProgress(socket, payload) {
 
     // Track active strokes so previews can be cleaned up if the drawer
     // disconnects mid-stroke (see the 'disconnecting' handler below).
-    (socket.data.activeStrokes ??= new Set()).add(stroke.id);
+    const activeStrokes = (socket.data.activeStrokes ??= new Set());
+    if (activeStrokes.size >= MAX_ACTIVE_STROKES && !activeStrokes.has(stroke.id)) return;
+    activeStrokes.add(stroke.id);
     socket.to(roomCode).emit('stroke_progress_received', { stroke });
     markRoomActivity(roomCode);
 }
@@ -58,7 +63,14 @@ function onStrokeEnd(socket, payload) {
 function onCursorMove(socket, payload) {
     const roomCode = readRoomCode(payload);
     try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
-    socket.to(roomCode).emit('cursor_moved', payload);
+
+    // Whitelist the relayed fields — this was the last relay that fanned out an
+    // arbitrary, unbounded client payload to every peer.
+    const position = payload?.position;
+    if (!position || typeof position.x !== 'number' || typeof position.y !== 'number') return;
+    const username = typeof payload?.username === 'string' ? payload.username.slice(0, 64) : undefined;
+
+    socket.to(roomCode).emit('cursor_moved', { position: { x: position.x, y: position.y }, username });
     markRoomActivity(roomCode);
 }
 

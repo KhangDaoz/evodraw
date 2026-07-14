@@ -3,6 +3,7 @@ import { verifyRoomAccess } from '../services/room.service.js';
 import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 import { evictRoom } from '../services/roomDocument.js';
 import { isRoomLocked, recordFailure, clearFailures } from '../utils/joinLimiter.js';
+import { getSocketClientIp } from '../utils/clientIp.js';
 
 // In-memory brute-force guard for socket joins, keyed on client IP.
 // Mirrors the REST joinRateLimiter; resets on restart (acceptable, like other in-memory state).
@@ -27,7 +28,9 @@ async function joinRoom(io, socket, payload) {
     const username = typeof payload?.username === 'string' ? payload.username.trim() : '';
     const passcode = typeof payload?.passcode === 'string' ? payload.passcode.trim() : '';
 
-    if (isJoinBlocked(socket.handshake.address)) {
+    // Behind a proxy the raw handshake address is the proxy's, which would lump every
+    // client into one bucket — resolve the forwarded client IP instead.
+    if (isJoinBlocked(getSocketClientIp(socket))) {
         socket.emit('room_error', { message: 'Too many join attempts. Please try again later.' });
         return;
     }

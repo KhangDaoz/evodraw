@@ -14,7 +14,7 @@ import { loadRoomDoc, persistRoomDoc, TOMBSTONE_TTL_MS } from './room.service.js
 const FLUSH_INTERVAL_MS = Number(process.env.ROOMDOC_FLUSH_INTERVAL_MS || 10_000);
 const MAX_DOC_ELEMENTS = 100_000; // mirror MAX_SNAPSHOT_ELEMENTS bound
 
-/** @typedef {{ elements: Map<string, object>, tombstones: Map<string, number>, seq: number, dirty: boolean, hydrating: Promise<void>|null }} RoomDoc */
+/** @typedef {{ elements: Map<string, object>, tombstones: Map<string, number>, seq: number, dirty: boolean, hydrating: Promise<void>|null, pendingEvict: boolean }} RoomDoc */
 
 /** @type {Map<string, RoomDoc>} */
 const rooms = new Map();
@@ -40,11 +40,14 @@ export async function getRoomDoc(code) {
 
     if (doc) {
         if (doc.hydrating) await doc.hydrating;
+        // Someone rejoined a room whose eviction is still awaiting a successful
+        // flush — it's live again, so cancel the pending drop.
+        doc.pendingEvict = false;
         pruneDocTombstones(doc);
         return doc;
     }
 
-    doc = { elements: new Map(), tombstones: new Map(), seq: 0, dirty: false, hydrating: null };
+    doc = { elements: new Map(), tombstones: new Map(), seq: 0, dirty: false, hydrating: null, pendingEvict: false };
     rooms.set(key, doc);
 
     // Assigned synchronously (the async IIFE only yields at its first await, which
@@ -157,11 +160,16 @@ export async function getSnapshot(code) {
     return { elements: Array.from(doc.elements.values()), seq: doc.seq };
 }
 
-/** Persist a room's document if it has unsaved changes. */
+/**
+ * Persist a room's document if it has unsaved changes.
+ * @returns {Promise<boolean>} true when the doc is safely persisted (or there was
+ *   nothing to save, or the room is gone); false when the write failed and the
+ *   doc still holds unsaved edits that must NOT be discarded.
+ */
 export async function flushRoom(code) {
     const key = normalize(code);
     const doc = rooms.get(key);
-    if (!doc || !doc.dirty) return;
+    if (!doc || !doc.dirty) return true;
     if (doc.hydrating) await doc.hydrating;
 
     const elements = Array.from(doc.elements.values());
@@ -170,21 +178,36 @@ export async function flushRoom(code) {
     try {
         await persistRoomDoc({ code: key, elements, tombstones });
         doc.dirty = false;
+        return true;
     } catch (err) {
         if (err.statusCode === 404) {
             // Room was TTL-deleted from the DB — drop the orphaned in-memory doc.
             rooms.delete(key);
-            return;
+            return true;
         }
         console.error(`[RoomDoc] Flush failed for ${key}:`, err.message);
+        return false;
     }
 }
 
-/** Flush then drop a room from memory (call when the room empties). */
+/**
+ * Flush then drop a room from memory (call when the room empties).
+ *
+ * If the flush fails (transient DB error), the doc is KEPT and marked for eviction
+ * instead: dropping it here would silently lose every edit made since the last
+ * successful flush. The periodic loop retries and drops it once it's clean.
+ */
 export async function evictRoom(code) {
     const key = normalize(code);
-    if (!rooms.has(key)) return;
-    await flushRoom(key);
+    const doc = rooms.get(key);
+    if (!doc) return;
+
+    const flushed = await flushRoom(key);
+    if (!flushed) {
+        doc.pendingEvict = true;
+        console.warn(`[RoomDoc] Eviction of ${key} deferred — unsaved edits, will retry on next flush.`);
+        return;
+    }
     rooms.delete(key);
 }
 
@@ -200,7 +223,15 @@ let flushTimer = null;
 export function startRoomDocLoop() {
     if (flushTimer) return;
     flushTimer = setInterval(() => {
-        flushAllDirty().catch((e) => console.error('[RoomDoc] periodic flush error:', e.message));
+        flushAllDirty()
+            .then(() => {
+                // Complete any eviction that was deferred by a failed flush: the room
+                // is empty and its edits are now safely persisted, so it can go.
+                for (const [key, doc] of rooms) {
+                    if (doc.pendingEvict && !doc.dirty && !doc.hydrating) rooms.delete(key);
+                }
+            })
+            .catch((e) => console.error('[RoomDoc] periodic flush error:', e.message));
         const now = Date.now();
         for (const doc of rooms.values()) pruneDocTombstones(doc, now);
     }, FLUSH_INTERVAL_MS);

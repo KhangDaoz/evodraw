@@ -1,5 +1,24 @@
 import { useEffect, useRef, useCallback } from 'react'
 import * as fabric from 'fabric'
+import { generateEvoId } from '../sync/canvasSerializer'
+
+/**
+ * Re-add an object that history previously removed (undo of a delete, redo of an add).
+ *
+ * The object MUST come back with a fresh _evoId: the server tombstones deleted ids and
+ * refuses to resurrect them, so re-adding under the old id is silently dropped — the
+ * object would reappear locally and nowhere else, diverging this client permanently.
+ * The stored op is rewritten in place so later undo/redo steps still resolve it.
+ */
+async function reviveObject(canvas, op) {
+  const [obj] = await fabric.util.enlivenObjects([op.object])
+  const freshId = generateEvoId()
+  obj._evoId = freshId
+  op.id = freshId
+  op.object = { ...op.object, _evoId: freshId }
+  if (op.object._evoImage) obj._evoImage = true
+  canvas.add(obj)
+}
 
 export default function useHistory(canvas, syncState) {
   const undoStack = useRef([])
@@ -107,19 +126,14 @@ export default function useHistory(canvas, syncState) {
             // canvas.fire('object:removed', { target }) is fired automatically by canvas.remove
           }
         } else {
-          const [obj] = await fabric.util.enlivenObjects([op.object])
-          if (op.object._evoId) obj._evoId = op.object._evoId
-          if (op.object._evoImage) obj._evoImage = true
-          canvas.add(obj)
+          // The undo above tombstoned this id server-side — come back as a new object.
+          await reviveObject(canvas, op)
           // canvas.fire('object:added', { target: obj }) is fired automatically by canvas.add
         }
       } else if (op.type === 'remove') {
         // Undo remove -> add, Redo remove -> remove
         if (isUndo) {
-          const [obj] = await fabric.util.enlivenObjects([op.object])
-          if (op.object._evoId) obj._evoId = op.object._evoId
-          if (op.object._evoImage) obj._evoImage = true
-          canvas.add(obj)
+          await reviveObject(canvas, op)
         } else {
           const target = findById(op.id)
           if (target) {

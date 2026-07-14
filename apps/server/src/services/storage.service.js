@@ -54,6 +54,9 @@ export async function uploadRoomFile({ roomCode, file }) {
         },
     });
 
+    // WARNING: uploads are PERMANENTLY WORLD-READABLE to anyone with the URL. There is
+    // no expiry and no auth check on read — do not use this bucket for anything private.
+    //
     // Accepted risk: uploaded files are made world-readable. The URL is embedded in
     // canvas objects, relayed to every peer, and persisted in MongoDB, so a signed
     // (expiring) URL would break historical boards on reload. Access control instead

@@ -3,11 +3,17 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import { validateEnv } from './config/env.js';
 import { connectDB } from './config/db.js';
 import { initFirebase } from './config/firebase.js';
 import { initializeSockets } from './sockets/index.js';
+import { TRUST_PROXY } from './utils/clientIp.js';
 import roomRoutes from './routes/room.routes.js';
 import fileRoutes from './routes/file.routes.js';
+
+// Refuse to boot on a missing/weak TOKEN_SECRET or (in production) a missing
+// MONGODB_URI, rather than failing lazily at the first request.
+validateEnv();
 
 // cors configuration - allow localhost and any origins specified in .env
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173").split(',').map(o => o.trim());
@@ -36,8 +42,19 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 const httpServer = createServer(app);
 
+// Behind a reverse proxy (Render), req.ip is the proxy's address unless Express is
+// told to trust the X-Forwarded-For hop. Without this every client shares one
+// rate-limit bucket, and express-rate-limit v8 throws on the unexpected header.
+if (TRUST_PROXY) {
+    app.set('trust proxy', 1);
+}
+
 // socket.io initialization with CORS settings
 const io = new Server(httpServer, {
+    // Socket.IO's 1 MB default silently truncates (and disconnects) senders well below
+    // the sync layer's own limits. Keep this in step with MAX_SNAPSHOT_BYTES in
+    // sockets/draw.handler.js, which is what actually validates the payloads.
+    maxHttpBufferSize: 10_000_000,
     cors: {
         origin: (origin, callback) => {
             if (isAllowedOrigin(origin)) {

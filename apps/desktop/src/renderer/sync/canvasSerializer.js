@@ -6,9 +6,19 @@ const CUSTOM_PROPS = ['_evoId', '_evoVersion', '_evoNonce', '_evoScreenShare', '
 // Stable unique ID for every Fabric object on this canvas
 let _idCounter = 0
 
+/**
+ * Mint a fresh element id. Exported because anything that re-adds a previously
+ * removed object (undo/redo) must give it a NEW identity: the server tombstones
+ * deleted ids and refuses to resurrect them, so re-adding under the old id would
+ * be silently dropped and the client would diverge from the room.
+ */
+export function generateEvoId() {
+  return `${Date.now()}-${++_idCounter}-${Math.random().toString(36).slice(2, 7)}`
+}
+
 function ensureId(obj) {
   if (!obj._evoId) {
-    obj._evoId = `${Date.now()}-${++_idCounter}-${Math.random().toString(36).slice(2, 7)}`
+    obj._evoId = generateEvoId()
   }
   return obj._evoId
 }

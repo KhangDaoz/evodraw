@@ -1,5 +1,5 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
-import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
+import { isAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 
 // Bounds for relayed share metadata (fanned out to every room member).
 const MAX_SHARE_ID_LENGTH = 64;
@@ -17,7 +17,7 @@ const handleScreenStart = (io, socket) => (payload) => {
     const displaySurface = typeof payload?.displaySurface === 'string'
         ? payload.displaySurface.slice(0, MAX_DISPLAY_SURFACE_LENGTH)
         : undefined;
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
 
     const username = socket.data.username || 'Anonymous';
 
@@ -43,7 +43,7 @@ const handleScreenStop = (io, socket) => (payload) => {
     const roomCode = readRoomCode(payload);
     const { shareId } = payload || {};
     if (!roomCode || typeof shareId !== 'string' || shareId.length > MAX_SHARE_ID_LENGTH) return;
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
 
     if (socket.data.shares) {
         socket.data.shares.delete(shareId);
@@ -59,7 +59,7 @@ const handleScreenStop = (io, socket) => (payload) => {
 const handleGetActive = (io, socket) => async (payload) => {
     const roomCode = readRoomCode(payload);
     if (!roomCode) return;
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
 
     try {
         const sockets = await io.in(roomCode).fetchSockets();

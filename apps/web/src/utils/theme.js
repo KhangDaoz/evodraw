@@ -11,6 +11,12 @@ export const BG_PRESETS = [
   { id: 'mint', light: '#e0f2f1', dark: '#0f1a19' },
 ]
 
+export const getBgPreset = (id) => BG_PRESETS.find(p => p.id === id) || BG_PRESETS[0]
+
+export function getStoredTheme() {
+  return localStorage.getItem('evodraw_theme') || 'light'
+}
+
 export function resolveTheme(themeId) {
   if (themeId === 'system') {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -24,7 +30,7 @@ export function applyTheme(themeId) {
 }
 
 // Canvas background pattern — a per-device preference (not room-synced)
-export const CANVAS_STYLES = ['dots', 'grid', 'none']
+const CANVAS_STYLES = ['dots', 'grid', 'none']
 
 export function getCanvasStyle() {
   const v = localStorage.getItem('evodraw_canvas_style')

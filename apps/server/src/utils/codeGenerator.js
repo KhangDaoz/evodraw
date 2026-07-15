@@ -17,3 +17,9 @@ export function generateRoomPasscode() {
     }
     return passcode;
 }
+
+// Accepted passcode shape (REST validation and socket join share this).
+// 4–6 chars is transitional: legacy rooms have 4-digit numeric passcodes and
+// TTL out within 24h; new passcodes are 6-char alphanumeric. Can tighten to
+// {6} after one TTL window. Case-insensitive; the service uppercases.
+export const PASSCODE_PATTERN = /^[A-Za-z0-9]{4,6}$/;

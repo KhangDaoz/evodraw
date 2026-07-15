@@ -11,7 +11,6 @@ const SYNCING_TOOLS = new Set(['pen', 'eraser', 'select'])
 export default function OverlayPage({ roomInfo, serverUrl, screenSize, onLeave }) {
   const { roomCode, username: initialUsername, shareId, displaySurface, captureX, captureY } = roomInfo
   const isOverlayMode = !!shareId
-  console.log('[OverlayPage] mount', { roomCode, shareId, isOverlayMode, screenSize })
 
   const canvasRef = useRef(null)
   const [fabricCanvas, setFabricCanvas] = useState(null)

@@ -1,5 +1,5 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
-import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
+import { isAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 import { allowEvent } from '../utils/eventRateLimiter.js';
 
 // Chat is fanned out to every member, so both fields must be bounded — an
@@ -17,7 +17,7 @@ const handleChatMessage = (io, socket) => async (data) => {
             return;
         }
 
-        try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+        if (!isAuthorizedRoom(socket, roomCode)) return;
 
         if (!allowEvent(socket, 'chat:message', { capacity: 10, refillPerSec: 2 })) return;
 

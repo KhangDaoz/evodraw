@@ -17,7 +17,7 @@ const roomSchema = new mongoose.Schema(
             type: Number,
             default: 0,
         },
-        // annaotions in the room
+        // annotations in the room
         elements: {
             type: Array,
             default: [],

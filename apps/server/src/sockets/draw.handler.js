@@ -1,17 +1,14 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
 import { getRoom, updateRoomService } from '../services/room.service.js';
-import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
+import { isAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 import { applyOp, getSnapshot } from '../services/roomDocument.js';
 import { allowEvent } from '../utils/eventRateLimiter.js';
+import { AUTHORITATIVE } from '../config/env.js';
 
 // Payload bounds to prevent memory/bandwidth DoS and runaway document growth.
 const MAX_SNAPSHOT_ELEMENTS = 100_000;
 const MAX_OP_BYTES = 1_000_000; // ~1 MB serialized per single canvas op
 const MAX_SNAPSHOT_BYTES = 10_000_000; // ~10 MB serialized for a full peer snapshot
-
-// Authoritative-server sync (Backend Tier 1). Set AUTHORITATIVE_SYNC=false to fall
-// back to the legacy pure-relay + client-snapshot behavior if a regression appears.
-const AUTHORITATIVE = process.env.AUTHORITATIVE_SYNC !== 'false';
 
 // ─── Handler Functions ────────────────────────────────────────────────────────
 
@@ -27,7 +24,7 @@ const MAX_ACTIVE_STROKES = 100;
 // Expected payload: { roomCode, stroke: { id, points: [[x,y],...], style } }
 function onStrokeProgress(socket, payload) {
     const roomCode = readRoomCode(payload);
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
 
     const stroke = payload?.stroke;
     if (
@@ -55,7 +52,7 @@ function onStrokeProgress(socket, payload) {
 // Expected payload: { roomCode, strokeId }
 function onStrokeEnd(socket, payload) {
     const roomCode = readRoomCode(payload);
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
     const strokeId = payload?.strokeId;
     if (typeof strokeId !== 'string' || strokeId.length > MAX_STROKE_ID_LENGTH) return;
     socket.data.activeStrokes?.delete(strokeId);
@@ -66,7 +63,7 @@ function onStrokeEnd(socket, payload) {
 // cursor move payload: { roomCode: string, position: { x, y }, username: string }
 function onCursorMove(socket, payload) {
     const roomCode = readRoomCode(payload);
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
 
     // Whitelist the relayed fields — this was the last relay that fanned out an
     // arbitrary, unbounded client payload to every peer.
@@ -87,7 +84,7 @@ function onCursorMove(socket, payload) {
 // winning op; the loser gets the authoritative state back so it converges.
 async function onCanvasOp(socket, payload) {
     const roomCode = readRoomCode(payload);
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
 
     // Drop oversized ops rather than fanning them out to every peer.
     if (JSON.stringify(payload.op || null).length > MAX_OP_BYTES) {
@@ -136,7 +133,7 @@ function onCanvasBgChange(socket, payload) {
     const bgColor = payload?.bgColor;
     if (!roomCode || typeof bgColor !== 'string' || bgColor.length === 0 || bgColor.length > 64) return;
     const bgId = typeof payload?.bgId === 'string' && payload.bgId.length <= 64 ? payload.bgId : 'default';
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
     if (!allowEvent(socket, 'canvas_bg_change', { capacity: 5, refillPerSec: 0.5 })) return;
     socket.to(roomCode).emit('canvas_bg_changed', { bgColor, bgId });
     markRoomActivity(roomCode);
@@ -150,7 +147,7 @@ function onCanvasBgChange(socket, payload) {
 async function onSaveSnapshot(socket, data) {
     const roomCode = readRoomCode(data);
     if (!roomCode) return;
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
 
     if (AUTHORITATIVE) {
         markRoomActivity(roomCode);
@@ -165,7 +162,7 @@ async function onSaveSnapshot(socket, data) {
         return;
     }
     try {
-        await updateRoomService({ code: roomCode, roomVersion: sceneVersion, elements });
+        await updateRoomService({ code: roomCode, elements });
         markRoomActivity(roomCode);
     } catch (err) {
         console.error(`[Snapshot] Failed to save for room ${roomCode}:`, err.message);
@@ -177,7 +174,7 @@ async function onSaveSnapshot(socket, data) {
 async function onRequestSnapshot(io, socket, data) {
     const roomCode = readRoomCode(data);
     if (!roomCode) return;
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
     try {
         if (AUTHORITATIVE) {
             const { elements, tombstones, seq } = await getSnapshot(roomCode);
@@ -204,7 +201,7 @@ async function onRequestSnapshot(io, socket, data) {
 // Peer-to-peer state sync: new joiner asks existing peers for canvas snapshot
 function onCanvasStateRequest(socket, data) {
     const roomCode = readRoomCode(data);
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
     socket.to(roomCode).emit('canvas_state_request', { requesterId: socket.id });
 }
 

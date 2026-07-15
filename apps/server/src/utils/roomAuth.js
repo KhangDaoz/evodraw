@@ -4,8 +4,11 @@
 // fallback once every client is known to send `roomCode`.
 export const readRoomCode = (payload) => payload?.roomCode ?? payload?.roomId;
 
+// Canonical form of a room code (codes are stored/compared uppercase).
+export const normalizeRoomCode = (code) => String(code || '').trim().toUpperCase();
+
 // Throw unless the socket's token authorizes the given room code.
-export function ensureAuthorizedRoom(socket, roomCode) {
+function ensureAuthorizedRoom(socket, roomCode) {
     const authRoomCode = socket.data?.auth?.roomCode;
     if (!authRoomCode) {
         throw new Error('Unauthorized: No room membership found');
@@ -18,4 +21,9 @@ export function ensureAuthorizedRoom(socket, roomCode) {
     }
 
     return true;
+}
+
+// Non-throwing variant for handlers that silently drop unauthorized events.
+export function isAuthorizedRoom(socket, roomCode) {
+    try { return ensureAuthorizedRoom(socket, roomCode); } catch { return false; }
 }

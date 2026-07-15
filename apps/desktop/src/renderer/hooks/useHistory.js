@@ -40,27 +40,26 @@ export default function useHistory(canvas, syncState) {
 
     const shouldIgnore = () => syncState?.current?._applying || historyApplying.current
 
+    // Serialized form of an object as stored in undo/redo ops
+    const snapshotOf = (target) => ({
+      ...target.toJSON(['_evoId', '_evoImage']),
+      _evoId: target._evoId,
+      _evoImage: target._evoImage || false,
+    })
+
     const onAdded = ({ target }) => {
       if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading) return
 
       if (!target._evoId) {
-        target._evoId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+        target._evoId = generateEvoId()
       }
 
-      saveState({
-        type: 'add',
-        id: target._evoId,
-        object: { ...target.toJSON(['_evoId', '_evoImage']), _evoId: target._evoId, _evoImage: target._evoImage || false }
-      })
+      saveState({ type: 'add', id: target._evoId, object: snapshotOf(target) })
     }
 
     const onRemoved = ({ target }) => {
       if (shouldIgnore() || target._evoDrawing || target._evoScreenShare || target._evoUploading) return
-      saveState({
-        type: 'remove',
-        id: target._evoId,
-        object: { ...target.toJSON(['_evoId', '_evoImage']), _evoId: target._evoId, _evoImage: target._evoImage || false }
-      })
+      saveState({ type: 'remove', id: target._evoId, object: snapshotOf(target) })
     }
 
     const onModified = ({ target }) => {
@@ -71,7 +70,7 @@ export default function useHistory(canvas, syncState) {
           type: 'modify',
           id: target._evoId || prevState._evoId,
           prevState: prevState,
-          newState: { ...target.toJSON(['_evoId', '_evoImage']), _evoId: target._evoId, _evoImage: target._evoImage || false }
+          newState: snapshotOf(target)
         })
       }
       dragState.current = null
@@ -81,7 +80,7 @@ export default function useHistory(canvas, syncState) {
     const onBeforeModify = (e) => {
       if (shouldIgnore() || isDragging.current || !e.target || e.target._evoScreenShare || e.target._evoUploading) return
       isDragging.current = true
-      dragState.current = { ...e.target.toJSON(['_evoId', '_evoImage']), _evoId: e.target._evoId, _evoImage: e.target._evoImage || false }
+      dragState.current = snapshotOf(e.target)
     }
 
     const onMouseDown = (o) => {

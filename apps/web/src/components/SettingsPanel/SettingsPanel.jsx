@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createInvite } from '../../services/api'
-import { BG_PRESETS, resolveTheme, applyTheme, getCanvasStyle, applyCanvasStyle } from '../../utils/theme'
+import { BG_PRESETS, getBgPreset, getStoredTheme, resolveTheme, applyTheme, getCanvasStyle, applyCanvasStyle } from '../../utils/theme'
 import './SettingsPanel.css'
 
 const THEME_OPTIONS = [
@@ -81,7 +81,7 @@ const CANVAS_STYLE_OPTIONS = [
 export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, username, onUsernameChange, canvasBgId, onBgChange, onExport, onImport }) {
   const [isOpen, setIsOpen] = useState(false)
   const [localUsername, setLocalUsername] = useState(username || 'Username')
-  const [theme, setTheme] = useState(() => localStorage.getItem('evodraw_theme') || 'light')
+  const [theme, setTheme] = useState(getStoredTheme)
   const [canvasStyle, setCanvasStyle] = useState(getCanvasStyle)
   const [showPin, setShowPin] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
@@ -100,8 +100,7 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
     setTheme(newTheme)
     if (onBgChange) {
       const resolved = resolveTheme(newTheme)
-      const preset = BG_PRESETS.find(p => p.id === activeBgId) || BG_PRESETS[0]
-      onBgChange(activeBgId, preset[resolved])
+      onBgChange(activeBgId, getBgPreset(activeBgId)[resolved])
     }
   }
 
@@ -112,8 +111,7 @@ export default function SettingsPanel({ roomCode, passcode, onLeaveRoom, usernam
     const handler = () => {
       if (onBgChange) {
         const resolved = mq.matches ? 'dark' : 'light'
-        const preset = BG_PRESETS.find(p => p.id === activeBgId) || BG_PRESETS[0]
-        onBgChange(activeBgId, preset[resolved])
+        onBgChange(activeBgId, getBgPreset(activeBgId)[resolved])
       }
     }
     mq.addEventListener('change', handler)

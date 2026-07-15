@@ -1,6 +1,7 @@
 import Room from '../models/Room.js';
 import bcrypt from 'bcrypt';
 import { generateRoomCode, generateRoomPasscode } from '../utils/codeGenerator.js';
+import { normalizeRoomCode } from '../utils/roomAuth.js';
 
 export async function createRoomService() {
 	let code = generateRoomCode();
@@ -39,7 +40,7 @@ export async function createRoomService() {
 }
 
 export async function getRoom({ code, passcode, skipPasscodeCheck = false }) {
-	const normalizedCode = String(code || '').trim().toUpperCase();
+	const normalizedCode = normalizeRoomCode(code);
 
 	if (!normalizedCode) {
 		if (skipPasscodeCheck) return null;
@@ -86,7 +87,7 @@ export async function getRoom({ code, passcode, skipPasscodeCheck = false }) {
  * Returns true only when the room exists and the passcode matches.
  */
 export async function verifyRoomAccess({ code, passcode }) {
-	const normalizedCode = String(code || '').trim().toUpperCase();
+	const normalizedCode = normalizeRoomCode(code);
 	if (!normalizedCode) return false;
 
 	const room = await Room.findOne({ code: normalizedCode });
@@ -96,8 +97,8 @@ export async function verifyRoomAccess({ code, passcode }) {
 	return bcrypt.compare(String(passcode || '').trim().toUpperCase(), room.passcode);
 }
 
-export async function updateRoomService({ code, elements, appState, status }) {
-	const normalizedCode = String(code || '').trim().toUpperCase();
+export async function updateRoomService({ code, elements }) {
+	const normalizedCode = normalizeRoomCode(code);
 
 	if (!normalizedCode) {
 		const error = new Error('Invalid room code.');
@@ -122,8 +123,6 @@ export async function updateRoomService({ code, elements, appState, status }) {
 	// converged via live LWW canvas_op, so the latest full snapshot is authoritative.
 	room.roomVersion = (room.roomVersion || 0) + 1;
 	room.elements = elements !== undefined ? elements : room.elements;
-	room.appState = appState !== undefined ? appState : room.appState;
-	room.status = status !== undefined ? status : room.status;
 	await room.save();
 }
 
@@ -148,7 +147,7 @@ export function pruneTombstones(tombstones, now = Date.now()) {
 // Read a room's persistent document for in-memory hydration. Returns plain
 // objects (lean) or null if the room doesn't exist. Does not touch activity/TTL.
 export async function loadRoomDoc(code) {
-	const normalizedCode = String(code || '').trim().toUpperCase();
+	const normalizedCode = normalizeRoomCode(code);
 	if (!normalizedCode) return null;
 
 	const room = await Room.findOne({ code: normalizedCode }).lean();
@@ -164,7 +163,7 @@ export async function loadRoomDoc(code) {
 // Persist the authoritative in-memory document (server-owned). Replaces the old
 // client-pushed snapshot clobber. Prunes tombstones and bumps roomVersion.
 export async function persistRoomDoc({ code, elements, tombstones }) {
-	const normalizedCode = String(code || '').trim().toUpperCase();
+	const normalizedCode = normalizeRoomCode(code);
 	if (!normalizedCode) {
 		const error = new Error('Invalid room code.');
 		error.statusCode = 400;

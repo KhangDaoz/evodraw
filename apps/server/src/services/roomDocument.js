@@ -1,5 +1,6 @@
 import { shouldAcceptRemote, getEvoId } from '../utils/lww.js';
 import { loadRoomDoc, persistRoomDoc, TOMBSTONE_TTL_MS } from './room.service.js';
+import { normalizeRoomCode as normalize } from '../utils/roomAuth.js';
 
 // ─── Authoritative in-memory canvas document (Backend Tier 1) ────────────────
 //
@@ -24,8 +25,6 @@ const MAX_DOC_BYTES = Number(process.env.ROOMDOC_MAX_BYTES || 12_000_000);
 
 /** @type {Map<string, RoomDoc>} */
 const rooms = new Map();
-
-const normalize = (code) => String(code || '').trim().toUpperCase();
 
 function pruneDocTombstones(doc, now = Date.now()) {
     const cutoff = now - TOMBSTONE_TTL_MS;

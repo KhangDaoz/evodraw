@@ -61,7 +61,6 @@ export default function App() {
     window.electronAPI.setMode('working');
   }, []);
 
-  console.log('[App] render', { roomInfo, serverUrl, screenSize });
   if (!roomInfo) return null;
 
   return (

@@ -12,7 +12,7 @@ import Toolbar from '../../components/Toolbar/Toolbar'
 import BottomBar from '../../components/BottomBar/BottomBar'
 import Canvas from '../../components/Canvas/Canvas'
 import SettingsPanel from '../../components/SettingsPanel/SettingsPanel'
-import { BG_PRESETS, resolveTheme } from '../../utils/theme'
+import { getBgPreset, getStoredTheme, resolveTheme } from '../../utils/theme'
 import MembersPanel from '../../components/MembersPanel/MembersPanel'
 import ChatPanel from '../../components/ChatPanel/ChatPanel'
 import OpenInAppBanner from '../../components/OpenInAppBanner/OpenInAppBanner'
@@ -50,38 +50,9 @@ export default function RoomPage() {
   // Canvas background: compute initial color based on theme
   const [canvasBgId, setCanvasBgId] = useState('default')
   const [canvasBgColor, setCanvasBgColor] = useState(() => {
-    const theme = localStorage.getItem('evodraw_theme') || 'light'
-    const resolved = resolveTheme(theme)
-    const preset = BG_PRESETS.find(p => p.id === 'default') || BG_PRESETS[0]
-    return preset[resolved]
+    const resolved = resolveTheme(getStoredTheme())
+    return getBgPreset('default')[resolved]
   })
-
-  // Theme tracking for responding to syncs correctly
-  const [currentTheme, setCurrentTheme] = useState(() => localStorage.getItem('evodraw_theme') || 'light')
-
-  // Listen to local storage theme changes (set by SettingsPanel) to keep currentTheme fresh
-  useEffect(() => {
-    const handleStorage = () => {
-      setCurrentTheme(localStorage.getItem('evodraw_theme') || 'light')
-    }
-    window.addEventListener('storage', handleStorage)
-
-    // Also set up a mutation observer on the HTML data-theme attribute
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'data-theme') {
-          const newTheme = document.documentElement.getAttribute('data-theme')
-          setCurrentTheme(newTheme || 'light')
-        }
-      })
-    })
-    observer.observe(document.documentElement, { attributes: true })
-
-    return () => {
-      window.removeEventListener('storage', handleStorage)
-      observer.disconnect()
-    }
-  }, [])
 
   // Clear passcode from history securely
   useEffect(() => {
@@ -118,24 +89,21 @@ export default function RoomPage() {
   // Document management: export/import board
   const { handleExport, handleImport } = useDocumentManager(fabricCanvas, syncStateRef, roomCode)
 
-  // Keep fabricCanvas and screenShareLayer in sync when canvas ref mounts
-  useEffect(() => {
+  const syncCanvasRefs = useCallback(() => {
     const fc = canvasRef.current?.getFabricCanvas()
     if (fc && fc !== fabricCanvas) setFabricCanvas(fc)
     const ssl = canvasRef.current?.getScreenShareLayer()
     if (ssl && ssl !== screenShareLayer) setScreenShareLayer(ssl)
-  })
+  }, [fabricCanvas, screenShareLayer])
+
+  // Keep fabricCanvas and screenShareLayer in sync when canvas ref mounts
+  useEffect(syncCanvasRefs)
 
   // Sync fabricCanvas and screenShareLayer after initial render when canvas ref is available
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const fc = canvasRef.current?.getFabricCanvas()
-      if (fc && fc !== fabricCanvas) setFabricCanvas(fc)
-      const ssl = canvasRef.current?.getScreenShareLayer()
-      if (ssl && ssl !== screenShareLayer) setScreenShareLayer(ssl)
-    }, 100)
+    const timer = setTimeout(syncCanvasRefs, 100)
     return () => clearTimeout(timer)
-  }, [fabricCanvas, screenShareLayer])
+  }, [syncCanvasRefs])
 
   // Right-click a screen-share rect → open its audio volume menu
   useEffect(() => {
@@ -175,25 +143,27 @@ export default function RoomPage() {
     return () => el.removeEventListener('contextmenu', handleContextMenu)
   }, [fabricCanvas])
 
+  // Apply a remote background change: a bgId maps to the preset's color for the
+  // local theme; a bare color (legacy clients) is applied as-is.
+  const applyRemoteBg = useCallback((bgId, bgColor) => {
+    if (bgId) {
+      setCanvasBgId(bgId)
+      const effectiveTheme = resolveTheme(document.documentElement.getAttribute('data-theme') || 'light')
+      setCanvasBgColor(getBgPreset(bgId)[effectiveTheme])
+    } else if (bgColor) {
+      setCanvasBgColor(bgColor)
+    }
+  }, [])
+
   // Canvas Background Color sync — listen for remote changes
   useEffect(() => {
     const socket = getSocket()
     if (!socket || !isConnected) return
 
-    const handleBgChanged = ({ bgId, bgColor }) => {
-      if (bgId) {
-        setCanvasBgId(bgId)
-        const effectiveTheme = resolveTheme(document.documentElement.getAttribute('data-theme') || 'light')
-        const preset = BG_PRESETS.find(p => p.id === bgId) || BG_PRESETS[0]
-        setCanvasBgColor(preset[effectiveTheme])
-      } else if (bgColor) {
-        setCanvasBgColor(bgColor)
-      }
-    }
-
+    const handleBgChanged = ({ bgId, bgColor }) => applyRemoteBg(bgId, bgColor)
     socket.on('canvas_bg_changed', handleBgChanged)
     return () => { socket.off('canvas_bg_changed', handleBgChanged) }
-  }, [isConnected])
+  }, [isConnected, applyRemoteBg])
 
   // Track unread messages and display toast when chat is closed
   useEffect(() => {
@@ -281,16 +251,7 @@ export default function RoomPage() {
         isConnected={isConnected}
         canvasBgColor={canvasBgColor}
         canvasBgId={canvasBgId}
-        onBgColorChange={(bgId, color) => {
-          if (bgId) {
-            setCanvasBgId(bgId)
-            const effectiveTheme = resolveTheme(document.documentElement.getAttribute('data-theme') || 'light')
-            const preset = BG_PRESETS.find(p => p.id === bgId) || BG_PRESETS[0]
-            setCanvasBgColor(preset[effectiveTheme])
-          } else if (color) {
-            setCanvasBgColor(color)
-          }
-        }}
+        onBgColorChange={applyRemoteBg}
       />
 
       <Toolbar

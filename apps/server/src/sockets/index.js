@@ -5,8 +5,7 @@ import { registerLiveKitHandlers } from './livekit.handler.js';
 import { registerScreenShareHandlers } from './screen.handler.js';
 import { verifyToken } from '../services/token.service.js';
 import { flushAllDirty, startRoomDocLoop, stopRoomDocLoop } from '../services/roomDocument.js';
-
-const AUTHORITATIVE = process.env.AUTHORITATIVE_SYNC !== 'false';
+import { AUTHORITATIVE } from '../config/env.js';
 
 let shuttingDown = false;
 

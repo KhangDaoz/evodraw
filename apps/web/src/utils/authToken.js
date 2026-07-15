@@ -12,7 +12,7 @@ const TOKEN_KEY = 'token'
  * Decode a JWT payload (the middle segment) without signature verification.
  * @returns {object|null} the decoded claims, or null if missing/malformed.
  */
-export function decodeToken(token) {
+function decodeToken(token) {
   if (!token || typeof token !== 'string') return null
   const parts = token.split('.')
   if (parts.length !== 3) return null

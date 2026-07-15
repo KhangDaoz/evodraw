@@ -3,7 +3,7 @@ import { getSocket } from '../services/socket';
 
 export default function useChat(roomCode, currentUsername) {
   const [messages, setMessages] = useState([]);
-  
+
   const usernameRef = useRef(currentUsername);
   useEffect(() => {
     usernameRef.current = currentUsername;
@@ -19,7 +19,6 @@ export default function useChat(roomCode, currentUsername) {
 
     socket.on('chat:message', handleIncomingMessage);
 
-    // Initial system message
     setMessages([
       { system: true, text: `Welcome to the chat, ${usernameRef.current}!` }
     ]);
@@ -34,9 +33,9 @@ export default function useChat(roomCode, currentUsername) {
     const socket = getSocket();
     if (socket && text.trim()) {
       socket.emit('chat:message', { roomCode, message: text, username: usernameRef.current });
-      // Predictively add to own UI
+      // Optimistic: show our own message immediately (the server only broadcasts to others)
       setMessages((prev) => [
-        ...prev, 
+        ...prev,
         { sender: usernameRef.current, text: text, timestamp: Date.now() }
       ]);
     }

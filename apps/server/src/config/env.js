@@ -2,6 +2,10 @@
 // misconfigured deploy dies immediately with a clear message, rather than lazily
 // at the first jwt.sign() — or worse, running happily with a guessable secret.
 
+// Authoritative-server sync (Backend Tier 1). Set AUTHORITATIVE_SYNC=false to fall
+// back to the legacy pure-relay + client-snapshot behavior if a regression appears.
+export const AUTHORITATIVE = process.env.AUTHORITATIVE_SYNC !== 'false';
+
 const MIN_SECRET_LENGTH = 32;
 
 // Placeholder values that have shipped in .env.example / tutorials. A token signed

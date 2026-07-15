@@ -1,10 +1,11 @@
 import { markRoomActivity } from '../utils/roomActivity.js';
 import { verifyRoomAccess } from '../services/room.service.js';
 import { generateRoomToken } from '../services/token.service.js';
-import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
+import { isAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 import { evictRoom } from '../services/roomDocument.js';
 import { isRoomLocked, recordFailure, clearFailures } from '../utils/joinLimiter.js';
 import { getSocketClientIp } from '../utils/clientIp.js';
+import { PASSCODE_PATTERN } from '../utils/codeGenerator.js';
 import { allowEvent } from '../utils/eventRateLimiter.js';
 
 // Usernames are broadcast to the whole room and stored on socket.data — bound them.
@@ -52,8 +53,7 @@ async function joinRoom(io, socket, payload) {
     // (REST /join) or an invite redemption (REST /redeem-invite), and every other
     // socket event already trusts it via ensureAuthorizedRoom. This is what lets an
     // invite-link joiner connect without the passcode ever leaving the server.
-    let tokenAuthorizes = false;
-    try { ensureAuthorizedRoom(socket, roomCode); tokenAuthorizes = true; } catch (e) { tokenAuthorizes = false; }
+    const tokenAuthorizes = isAuthorizedRoom(socket, roomCode);
 
     if (!tokenAuthorizes) {
         // Per-IP budget guards the passcode path only. Behind a proxy the raw handshake
@@ -65,8 +65,7 @@ async function joinRoom(io, socket, payload) {
         }
 
         // Fallback for any client whose token doesn't match: verify the passcode.
-        // 4-6 chars is transitional (legacy 4-digit rooms TTL out within 24h).
-        if (!roomCode || roomCode.length !== 6 || !passcode || !/^[A-Za-z0-9]{4,6}$/.test(passcode)) {
+        if (!roomCode || roomCode.length !== 6 || !passcode || !PASSCODE_PATTERN.test(passcode)) {
             socket.emit('room_error', { message: 'Invalid room code or passcode format.' });
             return;
         }
@@ -111,7 +110,7 @@ async function joinRoom(io, socket, payload) {
 function leaveRoom(io, socket, payload) {
     const roomCode = readRoomCode(payload);
     const username = payload?.username;
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
     socket.leave(roomCode);
     socket.data.roomCode = null;
 
@@ -141,7 +140,7 @@ function updateUsername(io, socket, payload) {
     const raw = payload?.newUsername;
     if (!roomCode || typeof raw !== 'string' || raw.trim().length === 0) return;
     const newUsername = raw.trim().slice(0, MAX_USERNAME_LENGTH);
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
     if (!allowEvent(socket, 'update_username', { capacity: 5, refillPerSec: 0.5 })) return;
 
     const oldUsername = socket.data.username;
@@ -158,8 +157,7 @@ function updateUsername(io, socket, payload) {
 function joinRoomOverlay(io, socket, payload) {
     const roomCode = readRoomCode(payload);
     const username = payload?.username;
-    const authRoomCode = socket.data?.auth?.roomCode?.toString();
-    if (!authRoomCode || authRoomCode !== (roomCode || '').toString()) {
+    if (!isAuthorizedRoom(socket, roomCode)) {
         socket.emit('room_error', { message: 'Token does not authorize this room.' });
         return;
     }
@@ -187,7 +185,7 @@ function onOverlayReady(socket, payload) {
     const shareId = payload?.shareId;
     if (!roomCode || typeof shareId !== 'string' || shareId.length > 64) return;
     // The one relay that used to trust payload.roomCode without an auth check.
-    try { ensureAuthorizedRoom(socket, roomCode); } catch (e) { return; }
+    if (!isAuthorizedRoom(socket, roomCode)) return;
     socket.to(roomCode).emit('overlay:ready', { shareId });
 }
 

@@ -1,4 +1,24 @@
- const BASE_URL = import.meta.env.VITE_API_URL || '/api'
+const BASE_URL = import.meta.env.VITE_API_URL || '/api'
+
+// Throw the server's message (falling back to `fallback`) on a non-2xx response.
+async function throwIfNotOk(res, fallback) {
+  if (res.ok) return
+  const body = await res.json().catch(() => ({}))
+  throw new Error(body.message || body.error || fallback)
+}
+
+// The server returns freshly minted room tokens in the Authorization header.
+function storeTokenFromResponse(res) {
+  const token = res.headers.get('Authorization')?.split(' ')[1]
+  if (token) {
+    localStorage.setItem('token', token)
+  }
+}
+
+function authHeaders() {
+  const token = localStorage.getItem('token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 export async function createRoom() {
   const res = await fetch(`${BASE_URL}/rooms`, {
@@ -6,16 +26,8 @@ export async function createRoom() {
     headers: { 'Content-Type': 'application/json' },
   })
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.message || 'Failed to create room')
-  }
-
-  const token = res.headers.get('Authorization')?.split(' ')[1]
-  if(token) {
-    localStorage.setItem('token', token)
-  }
-
+  await throwIfNotOk(res, 'Failed to create room')
+  storeTokenFromResponse(res)
   return res.json()
 }
 
@@ -26,16 +38,8 @@ export async function joinRoom(code, passcode) {
     body: JSON.stringify({ code: code.toUpperCase(), passcode }),
   })
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.message || 'Invalid room code or passcode')
-  }
-
-  const token = res.headers.get('Authorization')?.split(' ')[1]
-  if(token) {
-    localStorage.setItem('token', token)
-  }
-
+  await throwIfNotOk(res, 'Invalid room code or passcode')
+  storeTokenFromResponse(res)
   return res.json()
 }
 
@@ -44,17 +48,12 @@ export async function joinRoom(code, passcode) {
  * (from create/join) in localStorage. Returns { success, data: { invite } }.
  */
 export async function createInvite() {
-  const token = localStorage.getItem('token')
   const res = await fetch(`${BASE_URL}/rooms/invite`, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: authHeaders(),
   })
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.message || 'Failed to create invite link')
-  }
-
+  await throwIfNotOk(res, 'Failed to create invite link')
   return res.json()
 }
 
@@ -69,16 +68,8 @@ export async function redeemInvite(invite) {
     body: JSON.stringify({ invite }),
   })
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.message || 'Invalid or expired invite link')
-  }
-
-  const token = res.headers.get('Authorization')?.split(' ')[1]
-  if (token) {
-    localStorage.setItem('token', token)
-  }
-
+  await throwIfNotOk(res, 'Invalid or expired invite link')
+  storeTokenFromResponse(res)
   return res.json()
 }
 
@@ -89,17 +80,12 @@ export async function redeemInvite(invite) {
  * Returns { success: true, data: { token } }.
  */
 export async function createOverlayToken() {
-  const token = localStorage.getItem('token')
   const res = await fetch(`${BASE_URL}/rooms/overlay-token`, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: authHeaders(),
   })
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.message || 'Failed to create overlay token')
-  }
-
+  await throwIfNotOk(res, 'Failed to create overlay token')
   return res.json()
 }
 
@@ -111,22 +97,12 @@ export async function uploadFile(roomCode, file) {
   const formData = new FormData()
   formData.append('file', file)
 
-  const token = localStorage.getItem('token')
-  const headers = {}
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
   const res = await fetch(`${BASE_URL}/rooms/${roomCode}/files`, {
     method: 'POST',
-    headers,
+    headers: authHeaders(),
     body: formData,
   })
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.error || 'Failed to upload file')
-  }
-
+  await throwIfNotOk(res, 'Failed to upload file.')
   return res.json()
 }

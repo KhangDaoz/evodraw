@@ -1,3 +1,5 @@
+import { normalizeRoomCode } from './roomAuth.js';
+
 // Per-room failed-join limiter, shared by the REST /join and socket join_room
 // paths. Complements the per-IP limiters: an attacker rotating IPs against one
 // room still gets at most MAX_FAILURES guesses per window. Counts only
@@ -8,10 +10,6 @@ const MAX_FAILURES = 10;
 const MAX_ENTRIES = 10_000;
 
 const failures = new Map(); // normalized roomCode -> { count, resetAt }
-
-function normalize(roomCode) {
-    return String(roomCode || '').trim().toUpperCase();
-}
 
 function getLiveEntry(key) {
     const entry = failures.get(key);
@@ -24,12 +22,12 @@ function getLiveEntry(key) {
 }
 
 export function isRoomLocked(roomCode) {
-    const entry = getLiveEntry(normalize(roomCode));
+    const entry = getLiveEntry(normalizeRoomCode(roomCode));
     return !!entry && entry.count >= MAX_FAILURES;
 }
 
 export function recordFailure(roomCode) {
-    const key = normalize(roomCode);
+    const key = normalizeRoomCode(roomCode);
     if (!key) return;
 
     if (failures.size >= MAX_ENTRIES && !failures.has(key)) {
@@ -50,5 +48,5 @@ export function recordFailure(roomCode) {
 }
 
 export function clearFailures(roomCode) {
-    failures.delete(normalize(roomCode));
+    failures.delete(normalizeRoomCode(roomCode));
 }

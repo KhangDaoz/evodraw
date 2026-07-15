@@ -1,5 +1,5 @@
 import { AccessToken } from 'livekit-server-sdk';
-import { ensureAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
+import { isAuthorizedRoom, readRoomCode } from '../utils/roomAuth.js';
 
 // LiveKit Token Generator
 // Shared by voice chat (useVoiceChat) and screen share (useScreenShare) on the
@@ -11,7 +11,7 @@ const handleGetToken = (io, socket) => async (payload, callback) => {
         // Bounded: this becomes the LiveKit participant identity/name.
         const username = typeof payload?.username === 'string' ? payload.username.slice(0, 64) : undefined;
 
-        try { ensureAuthorizedRoom(socket, roomCode); } catch (e) {
+        if (!isAuthorizedRoom(socket, roomCode)) {
             if (callback) callback({ error: 'Unauthorized room access' });
             return;
         }
